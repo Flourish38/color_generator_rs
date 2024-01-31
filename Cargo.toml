@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 fast-srgb8 = "1.0.0"
 indicatif = "0.17.7"
+itertools = "0.12.1"
+rand = "0.8.5"
