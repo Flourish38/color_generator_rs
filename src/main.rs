@@ -1,7 +1,12 @@
-use std::{f32::INFINITY, iter::repeat_with, time::Instant};
-use itertools::{enumerate, iproduct, Itertools};
 use fast_srgb8::srgb8_to_f32;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use itertools::{enumerate, iproduct, Itertools};
+use once_cell::sync::Lazy;
+use rand::{
+    distributions::{self, Distribution},
+    thread_rng, Rng,
+};
+use std::{f32::INFINITY, iter::repeat_with, time::Instant};
 
 #[allow(non_camel_case_types)]
 type sRGB = [u8; 3];
@@ -14,22 +19,22 @@ fn as_index(c: sRGB) -> usize {
     out
 }
 
-fn to_string(c: sRGB) -> String{
+fn to_string(c: sRGB) -> String {
     format!("#{:06x}", as_index(c)).to_uppercase()
 }
 
 struct RGB {
-    r:f32,
-    g:f32,
-    b:f32
+    r: f32,
+    g: f32,
+    b: f32,
 }
 
 impl From<sRGB> for RGB {
     fn from(c: sRGB) -> Self {
-        RGB { 
-            r: srgb8_to_f32(c[0]), 
-            g: srgb8_to_f32(c[1]), 
-            b: srgb8_to_f32(c[2]) 
+        RGB {
+            r: srgb8_to_f32(c[0]),
+            g: srgb8_to_f32(c[1]),
+            b: srgb8_to_f32(c[2]),
         }
     }
 }
@@ -39,7 +44,7 @@ impl From<sRGB> for RGB {
 struct Oklab {
     L: f32,
     a: f32,
-    b: f32
+    b: f32,
 }
 
 impl From<RGB> for Oklab {
@@ -52,10 +57,10 @@ impl From<RGB> for Oklab {
         let m_ = m.cbrt();
         let s_ = s.cbrt();
 
-        Oklab{
+        Oklab {
             L: 0.2104542553 * l_ + 0.7936177850 * m_ + 0.0040720468 * s_,
             a: 1.9779984951 * l_ + 2.4285922050 * m_ + 0.4505937099 * s_,
-            b: 0.0259040371 * l_ + 0.7827717662 * m_ + 0.8086757660 * s_
+            b: 0.0259040371 * l_ + 0.7827717662 * m_ + 0.8086757660 * s_,
         }
     }
 }
@@ -67,25 +72,24 @@ impl From<sRGB> for Oklab {
 }
 
 #[allow(non_snake_case)]
-fn HyAB (c1: &Oklab, c2: &Oklab) -> f32 {
-    return (c1.L - c2.L).abs() + ((c1.a - c2.a).powi(2) + (c1.b - c2.b).powi(2)).sqrt()
+fn HyAB(c1: &Oklab, c2: &Oklab) -> f32 {
+    return (c1.L - c2.L).abs() + ((c1.a - c2.a).powi(2) + (c1.b - c2.b).powi(2)).sqrt();
 }
 
-
 struct SrgbLut<T> {
-    data: Vec<T>
+    data: Vec<T>,
 }
 
 impl<T: Copy> SrgbLut<T> {
     fn new(f: impl Fn(sRGB) -> T) -> Self {
-        let mut data = Vec::with_capacity(1<<24);
+        let mut data = Vec::with_capacity(1 << 24);
         // I wish there was an easy way to allow this to be parallel,
         // But it is fast enough that it isn't a significant issue.
         for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
             let c = [r, g, b];
             data.push(f(c))
         }
-        Self{ data: data }
+        Self { data: data }
     }
 
     fn get(&self, c: sRGB) -> T {
@@ -93,12 +97,12 @@ impl<T: Copy> SrgbLut<T> {
     }
 }
 
-fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist:F) -> Vec<(usize, f32)> {
+fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist: F) -> Vec<(usize, f32)> {
     let mut scores = Vec::with_capacity(pre_colors.len());
-    for i in 0..(pre_colors.len()-1) {
+    for i in 0..(pre_colors.len() - 1) {
         let c1 = &pre_colors[i];
         let mut min_score = (i, INFINITY);
-        for j in (i+1)..pre_colors.len() {
+        for j in (i + 1)..pre_colors.len() {
             let c2 = &pre_colors[j];
             let dist = dist(c1, c2);
             if dist < min_score.1 {
@@ -120,19 +124,81 @@ fn get_min_score(scores: &Vec<(usize, f32)>) -> (usize, usize, f32) {
     output
 }
 
-fn update_color(colors: &mut Vec<sRGB>, (i, j): (usize, usize)) -> usize {
-    let r = rand::random();
+#[derive(Debug)]
+struct ColorUpdate {
+    which: Which,
+    axis: Axis,
+    sign: Sign,
+}
 
-    
+#[derive(Clone, Debug)]
+enum Which {
+    First,
+    Second,
+}
+#[derive(Clone, Copy, Debug)]
+enum Axis {
+    R = 0,
+    G = 1,
+    B = 2,
+}
+#[derive(Clone, Debug)]
+enum Sign {
+    Positive,
+    Negative,
+}
+
+static UPDATE_SLICE: Lazy<Vec<ColorUpdate>> = Lazy::new(|| {
+    iproduct!(
+        [Which::First, Which::Second],
+        [Axis::R, Axis::G, Axis::B],
+        [Sign::Positive, Sign::Negative]
+    )
+    .map(|(w, a, s)| ColorUpdate {
+        which: w,
+        axis: a,
+        sign: s,
+    })
+    .collect_vec()
+});
+static UPDATE_DISTRIBUTION: Lazy<distributions::Slice<'static, ColorUpdate>> =
+    Lazy::new(|| distributions::Slice::new(UPDATE_SLICE.as_slice()).expect("Slice empty"));
+
+fn update_color(colors: &mut Vec<sRGB>, (i, j): (usize, usize)) -> usize {
+    let cu = UPDATE_DISTRIBUTION.sample(&mut thread_rng());
+    let (index, num) = match cu.which {
+        Which::First => match cu.sign {
+            Sign::Positive if colors[i][cu.axis as usize] == 0xFF => (j, 0xFF),
+            Sign::Negative if colors[i][cu.axis as usize] == 0x00 => (j, 0x01),
+            Sign::Positive => (i, 0x01),
+            Sign::Negative => (i, 0xFF),
+        },
+        Which::Second => match cu.sign {
+            Sign::Positive if colors[j][cu.axis as usize] == 0xFF => (i, 0xFF),
+            Sign::Negative if colors[j][cu.axis as usize] == 0x00 => (i, 0x01),
+            Sign::Positive => (j, 0x01),
+            Sign::Negative => (j, 0xFF),
+        },
+    };
+    colors[index][cu.axis as usize] += num;
+    index
 }
 
 // ProgressStyle::with_template("{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}").unwrap()
 
 fn main() {
-    let colors:Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
-    let oklab_colors:Vec<Oklab> = colors.iter().map(|c| From::from(*c)).collect_vec();
-    //let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
-    let t1 = Instant::now();
+    let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
+    let oklab_colors: Vec<Oklab> = colors.iter().map(|c| From::from(*c)).collect_vec();
+    // let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
+    // let t1 = Instant::now();
     let scores = get_scores(&oklab_colors, HyAB);
-    println!("{:#?}\t\t{:?}", t1.elapsed(), get_min_score(&scores))
+    let (i, j, _) = get_min_score(&scores);
+    println!("{}\t{}", to_string(colors[i]), to_string(colors[j]));
+    let index = update_color(&mut colors, (i, j));
+    println!(
+        "{}\t{}\t\t{:?}",
+        to_string(colors[i]),
+        to_string(colors[j]),
+        (i, j, index)
+    )
 }
