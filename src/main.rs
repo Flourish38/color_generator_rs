@@ -120,10 +120,16 @@ fn get_min_score(scores: &Vec<(usize, f32)>) -> (usize, usize, f32) {
     output
 }
 
+fn update_color(colors: &mut Vec<sRGB>, (i, j): (usize, usize)) -> usize {
+    let r = rand::random();
+
+    
+}
+
 // ProgressStyle::with_template("{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}").unwrap()
 
 fn main() {
-    let colors:Vec<sRGB> = repeat_with(rand::random).take(100000).collect_vec();
+    let colors:Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
     let oklab_colors:Vec<Oklab> = colors.iter().map(|c| From::from(*c)).collect_vec();
     //let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
     let t1 = Instant::now();
