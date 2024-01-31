@@ -93,29 +93,14 @@ impl<T: Copy> SrgbLut<T> {
     }
 }
 
-struct DistanceMetric<T, F1: Fn(sRGB) -> T, F2: Fn(&T, &T) -> f32> {
-    preprocess: F1,
-    dist: F2,
-}
-
-impl<T, F1: Fn(sRGB) -> T, F2: Fn(&T, &T) -> f32> DistanceMetric<T, F1, F2>{
-    fn preprocess(&self, c: sRGB) -> T {
-        (self.preprocess)(c)
-    }
-
-    fn dist(&self, x:&T, y: &T) -> f32 {
-        (self.dist)(x, y)
-    }
-}
-
-fn get_scores<T, F1: Fn(sRGB) -> T, F2: Fn(&T, &T) -> f32>(colors: &Vec<sRGB>, dm:&DistanceMetric<T, F1, F2>) -> Vec<(usize, f32)> {
-    let mut scores = Vec::with_capacity(colors.len());
-    for i in 0..(colors.len()-1) {
-        let c1 = dm.preprocess(colors[i]);
+fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist:F) -> Vec<(usize, f32)> {
+    let mut scores = Vec::with_capacity(pre_colors.len());
+    for i in 0..(pre_colors.len()-1) {
+        let c1 = &pre_colors[i];
         let mut min_score = (i, INFINITY);
-        for j in (i+1)..colors.len() {
-            let c2 = dm.preprocess(colors[j]);
-            let dist = dm.dist(&c1, &c2);
+        for j in (i+1)..pre_colors.len() {
+            let c2 = &pre_colors[j];
+            let dist = dist(c1, c2);
             if dist < min_score.1 {
                 min_score = (j, dist)
             }
@@ -138,16 +123,10 @@ fn get_min_score(scores: &Vec<(usize, f32)>) -> (usize, usize, f32) {
 // ProgressStyle::with_template("{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}").unwrap()
 
 fn main() {
-    let colors:Vec<sRGB> = repeat_with(rand::random).take(10000).collect_vec();
+    let colors:Vec<sRGB> = repeat_with(rand::random).take(100000).collect_vec();
+    let oklab_colors:Vec<Oklab> = colors.iter().map(|c| From::from(*c)).collect_vec();
     //let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
-    let dm = DistanceMetric { 
-        preprocess: |c| c.into(),
-        dist: |x, y| HyAB(&x, &y)
-    };
-    let scores = get_scores(&colors, &dm);
     let t1 = Instant::now();
-    for _ in 0..10000 {
-        let _ = get_min_score(&scores);
-    }
-    println!("{:#?}", t1.elapsed())
+    let scores = get_scores(&oklab_colors, HyAB);
+    println!("{:#?}\t\t{:?}", t1.elapsed(), get_min_score(&scores))
 }
