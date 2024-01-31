@@ -1,7 +1,7 @@
-use std::time::Instant;
-use itertools::iproduct;
+use std::{f32::INFINITY, iter::repeat_with, time::Instant};
+use itertools::{iproduct, Itertools};
 use fast_srgb8::srgb8_to_f32;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 
 #[allow(non_camel_case_types)]
 type sRGB = [u8; 3];
@@ -73,7 +73,7 @@ struct SrgbLut<T> {
 }
 
 impl<T: Copy> SrgbLut<T> {
-    fn new(f: impl Fn(sRGB) -> (T)) -> Self {
+    fn new(f: impl Fn(sRGB) -> T) -> Self {
         let mut data = Vec::with_capacity(1<<24);
         // I wish there was an easy way to allow this to be parallel,
         // But it is fast enough that it isn't a significant issue.
@@ -89,24 +89,44 @@ impl<T: Copy> SrgbLut<T> {
     }
 }
 
+struct DistanceMetric<T, F1: Fn(sRGB) -> T, F2: Fn(&T, &T) -> f32> {
+    preprocess: F1,
+    dist: F2,
+}
+
+impl<T, F1: Fn(sRGB) -> T, F2: Fn(&T, &T) -> f32> DistanceMetric<T, F1, F2>{
+    fn preprocess(&self, c: sRGB) -> T {
+        (self.preprocess)(c)
+    }
+
+    fn dist(&self, x:&T, y: &T) -> f32 {
+        (self.dist)(x, y)
+    }
+}
+
+fn get_min_score<T, F1: Fn(sRGB) -> T, F2: Fn(&T, &T) -> f32>(colors: &Vec<sRGB>, dm:&DistanceMetric<T, F1, F2>) -> (usize, usize, f32) {
+    let mut output = (0, 0, -INFINITY);
+    for i in 0..(colors.len()-1) {
+        let c1 = dm.preprocess(colors[i]);
+        for j in (i+1)..colors.len() {
+            let c2 = dm.preprocess(colors[j]);
+            let dist = dm.dist(&c1, &c2);
+            if dist > output.2 {
+                output = (i, j, dist)
+            }
+        }
+    }
+    return output;
+}
+
 fn main() {
-    let mut t_start = Instant::now();
+    let colors:Vec<sRGB> = repeat_with(rand::random).take(10000).collect_vec();
     let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
-    println!("{:#?}", t_start.elapsed());
-    //let bar = ProgressBar::new(1000).with_style(ProgressStyle::with_template("{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}").unwrap());
-    let ok_ref: Oklab = [0, 0, 0].into();
-    t_start = Instant::now();
-    for _ in 0..10000000 {
-        let c: sRGB = rand::random();
-        let ok = oklab_lut.get(c);
-        let dist = HyAB(&ok, &ok_ref);
-    }
-    println!("{:#?}", t_start.elapsed());
-    t_start = Instant::now();
-    for _ in 0..10000000 {
-        let c: sRGB = rand::random();
-        let ok: Oklab = c.into();
-        let dist = HyAB(&ok, &ok_ref);
-    }
-    println!("{:#?}", t_start.elapsed());
+    let dm = DistanceMetric { 
+        preprocess: |c| oklab_lut.get(c),
+        dist: |x, y| HyAB(&x, &y)
+    };
+    let start_time = Instant::now();
+    let output = get_min_score(&colors, &dm);
+    println!("{:?}\t{:?}\t{:?}\t\t{:#?}", output, colors[output.0], colors[output.1], start_time.elapsed());
 }
