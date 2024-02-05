@@ -4,14 +4,14 @@ use itertools::{enumerate, iproduct, Itertools};
 use once_cell::sync::Lazy;
 use rand::{
     distributions::{self, Distribution},
-    thread_rng, Rng,
+    thread_rng,
 };
 use std::{f32::INFINITY, iter::repeat_with, time::Instant};
 
 #[allow(non_camel_case_types)]
 type sRGB = [u8; 3];
 
-fn as_index(c: sRGB) -> usize {
+fn as_index(c: &sRGB) -> usize {
     // RGB order. Might change later.
     let mut out: usize = c[2] as usize;
     out |= (c[1] as usize) << 8;
@@ -19,10 +19,11 @@ fn as_index(c: sRGB) -> usize {
     out
 }
 
-fn to_string(c: sRGB) -> String {
+fn to_string(c: &sRGB) -> String {
     format!("#{:06x}", as_index(c)).to_uppercase()
 }
 
+#[derive(Debug)]
 struct RGB {
     r: f32,
     g: f32,
@@ -47,6 +48,9 @@ struct Oklab {
     b: f32,
 }
 
+// This is a scale factor to make it roughly line up with CIELAB.
+// It's actually completely optional, but I think it makes the numbers nicer
+const OKLAB_SCALE: f32 = 100.0;
 impl From<RGB> for Oklab {
     fn from(c: RGB) -> Self {
         let l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
@@ -58,9 +62,12 @@ impl From<RGB> for Oklab {
         let s_ = s.cbrt();
 
         Oklab {
-            L: 0.2104542553 * l_ + 0.7936177850 * m_ + 0.0040720468 * s_,
-            a: 1.9779984951 * l_ + 2.4285922050 * m_ + 0.4505937099 * s_,
-            b: 0.0259040371 * l_ + 0.7827717662 * m_ + 0.8086757660 * s_,
+            L: (0.2104542553 * OKLAB_SCALE) * l_ + (0.7936177850 * OKLAB_SCALE) * m_
+                - (0.0040720468 * OKLAB_SCALE) * s_,
+            a: (1.9779984951 * OKLAB_SCALE) * l_ - (2.4285922050 * OKLAB_SCALE) * m_
+                + (0.4505937099 * OKLAB_SCALE) * s_,
+            b: (0.0259040371 * OKLAB_SCALE) * l_ + (0.7827717662 * OKLAB_SCALE) * m_
+                - (0.8086757660 * OKLAB_SCALE) * s_,
         }
     }
 }
@@ -92,24 +99,27 @@ impl<T: Copy> SrgbLut<T> {
         Self { data: data }
     }
 
-    fn get(&self, c: sRGB) -> T {
+    fn get(&self, c: &sRGB) -> T {
         self.data[as_index(c)]
     }
 }
 
-fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist: F) -> Vec<(usize, f32)> {
-    let mut scores = Vec::with_capacity(pre_colors.len());
-    for i in 0..(pre_colors.len() - 1) {
-        let c1 = &pre_colors[i];
-        let mut min_score = (i, INFINITY);
-        for j in (i + 1)..pre_colors.len() {
-            let c2 = &pre_colors[j];
-            let dist = dist(c1, c2);
-            if dist < min_score.1 {
-                min_score = (j, dist)
-            }
+fn get_score<T, F: Fn(&T, &T) -> f32>(i: usize, pre_colors: &Vec<T>, dist: F) -> (usize, f32) {
+    let c = &pre_colors[i];
+    let mut score = (i, INFINITY);
+    for j in (i + 1)..pre_colors.len() {
+        let dist = dist(c, &pre_colors[j]);
+        if dist < score.1 {
+            score = (j, dist);
         }
-        scores.push(min_score);
+    }
+    return score;
+}
+
+fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist: &F) -> Vec<(usize, f32)> {
+    let mut scores = Vec::with_capacity(pre_colors.len() - 1);
+    for i in 0..(pre_colors.len() - 1) {
+        scores.push(get_score(i, pre_colors, dist));
     }
     return scores;
 }
@@ -184,21 +194,91 @@ fn update_color(colors: &mut Vec<sRGB>, (i, j): (usize, usize)) -> usize {
     index
 }
 
+fn update_scores<T, F: Fn(&T, &T) -> f32>(
+    scores: &mut Vec<(usize, f32)>,
+    updated_index: usize,
+    pre_colors: &Vec<T>,
+    dist: &F,
+) {
+    let c_updated = &pre_colors[updated_index];
+
+    // Recompute scores of indexes before updated_index
+    for i in 0..updated_index {
+        let (prev_index, prev_score) = scores[i];
+        let score = dist(c_updated, &pre_colors[i]);
+        if score < prev_score {
+            scores[i] = (updated_index, score);
+        } else if prev_index == updated_index {
+            // Have to recompute score for this element
+            scores[i] = get_score(i, pre_colors, dist);
+        } // else, no need to change it
+    }
+
+    // Recompute score of updated_index
+    if updated_index < scores.len() {
+        // scores are 1 shorter than the colors vec
+        scores[updated_index] = get_score(updated_index, pre_colors, dist)
+    }
+}
+
 // ProgressStyle::with_template("{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}").unwrap()
 
 fn main() {
-    let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
-    let oklab_colors: Vec<Oklab> = colors.iter().map(|c| From::from(*c)).collect_vec();
-    // let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
-    // let t1 = Instant::now();
-    let scores = get_scores(&oklab_colors, HyAB);
-    let (i, j, _) = get_min_score(&scores);
-    println!("{}\t{}", to_string(colors[i]), to_string(colors[j]));
-    let index = update_color(&mut colors, (i, j));
-    println!(
-        "{}\t{}\t\t{:?}",
-        to_string(colors[i]),
-        to_string(colors[j]),
-        (i, j, index)
-    )
+    // let c1: sRGB = [0x00, 0x10, 0x0D];
+    // let c2: sRGB = [0x03, 0x00, 0x05];
+    // let r1: RGB = c1.into();
+    // let r2: RGB = c2.into();
+    // let ok1 = c1.into();
+    // let ok2 = c2.into();
+    // println!("{:?}\t{:?}\t{}", ok1, ok2, HyAB(&ok1, &ok2));
+    let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
+    let num_iter: u64 = 1000000000;
+
+    for big_num in 1..40 {
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
+        let mut oklab_colors: Vec<Oklab> = colors.iter().map(|c| oklab_lut.get(c)).collect_vec();
+        // let t1 = Instant::now();
+        let mut scores = get_scores(&oklab_colors, &HyAB);
+        let mut best = (-INFINITY, Vec::new());
+
+        let start_time = Instant::now();
+        for _it in (0..num_iter).progress_with(
+            ProgressBar::new(num_iter).with_style(ProgressStyle::with_template(
+                "{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}",
+            )
+            .unwrap(),
+        )) {
+            let (i, j, score) = get_min_score(&scores);
+            if score > best.0 {
+                best = (score, colors.clone());
+                // println!(
+                //     "{: >10}\t{}\t{}\t{}",
+                //     it,
+                //     score,
+                //     to_string(&colors[i]),
+                //     to_string(&colors[j])
+                // );
+            }
+            let index = update_color(&mut colors, (i, j));
+            oklab_colors[index] = oklab_lut.get(&colors[index]);
+            update_scores(&mut scores, index, &oklab_colors, &HyAB);
+        }
+        println!(
+            "{}:\t{:#?}\t{}\t{:?}",
+            big_num,
+            start_time.elapsed(),
+            best.0,
+            best.1.iter().map(to_string).collect_vec()
+        );
+    }
+    // let oklab_best = best.1.iter().map(|c| From::from(*c)).collect_vec();
+    // let best_scores = get_scores(&oklab_best, &HyAB);
+    // let min_score = get_min_score(&best_scores);
+    // println!(
+    //     "{}\t{}\t{}",
+    //     min_score.2,
+    //     to_string(&best.1[min_score.0]),
+    //     to_string(&best.1[min_score.1])
+    // );
+    // assert_eq!(best.0, min_score.2)
 }
