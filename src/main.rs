@@ -124,6 +124,26 @@ fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist: &F) -> Vec<(us
     return scores;
 }
 
+fn get_score_constrained<T, F: Fn(&T, &T) -> f32>(i: usize,  pre_colors: &Vec<T>, constraint: f32, dist: F) -> (usize, f32) {
+    let c = &pre_colors[i];
+    let mut score = (i, constraint);
+    for j in (i + 1)..pre_colors.len() {
+        let dist = dist(c, &pre_colors[j]);
+        if dist < score.1 {
+            score = (j, dist);
+        }
+    }
+    return score;
+}
+
+fn get_scores_constrained<T, F: Fn(&T, &T) -> f32>(colors: &Vec<sRGB>, pre_colors: &Vec<T>, constraints: &SrgbLut<f32>, dist: &F) -> Vec<(usize, f32)> {
+    let mut scores = Vec::with_capacity(pre_colors.len());
+    for i in 0..pre_colors.len() {
+        scores.push(get_score_constrained(i, pre_colors, constraints.get(&colors[i]), dist));
+    }
+    return scores;
+}
+
 fn get_min_score(scores: &Vec<(usize, f32)>) -> (usize, usize, f32) {
     let mut output = (0, 0, INFINITY);
     for (i, (j, val)) in enumerate(scores) {
@@ -132,6 +152,53 @@ fn get_min_score(scores: &Vec<(usize, f32)>) -> (usize, usize, f32) {
         }
     }
     output
+}
+
+trait ScoreMetric {
+    fn get_min_score(&self) -> (usize, usize, f32);
+
+    fn update(&mut self, i: usize);
+}
+
+struct ConstrainedDistance<'a> {
+    lut: &'a SrgbLut<Oklab>,
+    constraints: &'a SrgbLut<f32>,
+    colors: Vec<sRGB>,
+    pre_colors: Vec<Oklab>,
+    scores: Vec<(usize, f32)>,
+}
+
+impl<'a> ConstrainedDistance<'a>{
+    fn new(colors: Vec<sRGB>, lut: &'a SrgbLut<Oklab>, constraints: &'a SrgbLut<f32>) -> ConstrainedDistance<'a> {
+        let pre_colors = colors.iter().map(|c| lut.get(c)).collect_vec();
+        let scores = get_scores_constrained(&colors, &pre_colors, constraints, &HyAB);
+        ConstrainedDistance {
+            lut: lut,
+            constraints: constraints,
+            colors: colors,
+            pre_colors: pre_colors,
+            scores: scores,
+        }
+    }
+
+    fn update_color(&mut self, indices: (usize, usize)) -> usize {
+        update_color(&mut self.colors, indices)
+    }
+
+    fn get_colors(&self) -> Vec<sRGB> {
+        self.colors.clone()
+    }
+}
+
+impl<'a> ScoreMetric for ConstrainedDistance<'a>{
+    fn get_min_score(&self) -> (usize, usize, f32) {
+        get_min_score(&self.scores)
+    }
+
+    fn update(&mut self, i: usize) {
+        self.pre_colors[i] = self.lut.get(&self.colors[i]);
+        update_scores_constrained(&mut self.scores, i, &self.colors, &self.pre_colors, self.constraints, &HyAB);
+    }
 }
 
 #[derive(Debug)]
@@ -221,6 +288,35 @@ fn update_scores<T, F: Fn(&T, &T) -> f32>(
     }
 }
 
+fn update_scores_constrained<T, F: Fn(&T, &T) -> f32>(
+    scores: &mut Vec<(usize, f32)>,
+    updated_index: usize,
+    colors: &Vec<sRGB>,
+    pre_colors: &Vec<T>,
+    constraints: &SrgbLut<f32>,
+    dist: &F,
+) {
+    let c_updated = &pre_colors[updated_index];
+
+    // Recompute scores of indexes before updated_index
+    for i in 0..updated_index {
+        let (prev_index, prev_score) = scores[i];
+        let score = dist(c_updated, &pre_colors[i]);
+        if score < prev_score {
+            scores[i] = (updated_index, score);
+        } else if prev_index == updated_index {
+            // Have to recompute score for this element
+            scores[i] = get_score_constrained(i, pre_colors, constraints.get(&colors[i]), dist);
+        } // else, no need to change it
+    }
+
+    // Recompute score of updated_index
+    if updated_index < scores.len() {
+        // scores are 1 shorter than the colors vec
+        scores[updated_index] = get_score_constrained(updated_index, pre_colors, constraints.get(&colors[updated_index]), dist)
+    }
+}
+
 // ProgressStyle::with_template("{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}").unwrap()
 
 fn main() {
@@ -231,14 +327,31 @@ fn main() {
     // let ok1 = c1.into();
     // let ok2 = c2.into();
     // println!("{:?}\t{:?}\t{}", ok1, ok2, HyAB(&ok1, &ok2));
+    // let c2 = [0xfe, 0xff, 0x00].into();
+    // let mut max_dist = ([0x00, 0x00, 0x00], 0.0);
+    // for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
+    //     let c = [r, g, b];
+    //     let dist = HyAB(&c.into(), &c2);
+    //     if dist > max_dist.1 {
+    //         max_dist = (c, dist);
+    //     }
+    // }
+    // println!("{}\t{}", max_dist.1, to_string(&max_dist.0))
     let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
+    let constraint_lut: SrgbLut<f32> = SrgbLut::new(|c1| {
+        let c = &oklab_lut.get(&c1);
+        let v1 = HyAB(c, &[0x00, 0x00, 0x00].into());
+        let v2 = HyAB(c, &[0xFF, 0xFF, 0xFF].into());
+        return if v1 < v2 { v1 } else { v2 }
+        // [[0x00, 0x00, 0x00].into(), [0xFF, 0xFF, 0xFF].into()].iter().map(|c2| HyAB(c, c2)).min_by(|x, y| PartialOrd::partial_cmp(x, y).unwrap()).unwrap()
+    });
+    // println!("{}\t{}", constraint_lut.get(&[0xff, 0xff, 0xff]), constraint_lut.get(&[0x00, 0x00, 0x00]));
+    
     let num_iter: u64 = 1000000000;
 
-    for big_num in 1..40 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
-        let mut oklab_colors: Vec<Oklab> = colors.iter().map(|c| oklab_lut.get(c)).collect_vec();
-        // let t1 = Instant::now();
-        let mut scores = get_scores(&oklab_colors, &HyAB);
+    for big_num in 0..10 {
+        let colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
+        let mut score_metric = ConstrainedDistance::new(colors, &oklab_lut, &constraint_lut);
         let mut best = (-INFINITY, Vec::new());
 
         let start_time = Instant::now();
@@ -248,9 +361,9 @@ fn main() {
             )
             .unwrap(),
         )) {
-            let (i, j, score) = get_min_score(&scores);
+            let (i, j, score) = score_metric.get_min_score();
             if score > best.0 {
-                best = (score, colors.clone());
+                best = (score, score_metric.get_colors());
                 // println!(
                 //     "{: >10}\t{}\t{}\t{}",
                 //     it,
@@ -259,9 +372,8 @@ fn main() {
                 //     to_string(&colors[j])
                 // );
             }
-            let index = update_color(&mut colors, (i, j));
-            oklab_colors[index] = oklab_lut.get(&colors[index]);
-            update_scores(&mut scores, index, &oklab_colors, &HyAB);
+            let index = score_metric.update_color((i, j));
+            score_metric.update(index);
         }
         println!(
             "{}:\t{:#?}\t{}\t{:?}",
@@ -271,6 +383,7 @@ fn main() {
             best.1.iter().map(to_string).collect_vec()
         );
     }
+    
     // let oklab_best = best.1.iter().map(|c| From::from(*c)).collect_vec();
     // let best_scores = get_scores(&oklab_best, &HyAB);
     // let min_score = get_min_score(&best_scores);
