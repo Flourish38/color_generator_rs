@@ -32,37 +32,37 @@ pub trait ScoreMetric {
     fn update(&mut self, i: usize, color: sRGB);
 }
 
-pub struct ConstrainedDistance<'a> {
-    colors: &'a SrgbLut<Oklab>,
+pub struct ConstrainedDistance<'a, 'b> {
+    color_lut: &'a SrgbLut<Oklab>,
     pre_colors: Vec<Oklab>,
-    constraints: &'a SrgbLut<f32>,
+    constraint_lut: &'b SrgbLut<f32>,
     pre_constraints: Vec<f32>,
     scores: Vec<(usize, f32)>,
 }
 
-impl<'a> ConstrainedDistance<'a>{
-    pub fn new(colors: &Vec<sRGB>, lut: &'a SrgbLut<Oklab>, constraints: &'a SrgbLut<f32>) -> ConstrainedDistance<'a> {
-        let pre_colors = colors.iter().map(|c| lut.get(c)).collect_vec();
-        let pre_constraints = colors.iter().map(|c| constraints.get(c)).collect_vec();
+impl<'a, 'b> ConstrainedDistance<'a, 'b>{
+    pub fn new(colors: &Vec<sRGB>, color_lut: &'a SrgbLut<Oklab>, constraint_lut: &'b SrgbLut<f32>) -> ConstrainedDistance<'a, 'b> {
+        let pre_colors = colors.iter().map(|c| color_lut.get(c)).collect_vec();
+        let pre_constraints = colors.iter().map(|c| constraint_lut.get(c)).collect_vec();
         let scores = get_scores_constrained(&pre_colors, &pre_constraints, &HyAB);
         ConstrainedDistance {
-            colors: lut,
+            color_lut: color_lut,
             pre_colors: pre_colors,
-            constraints: constraints,
+            constraint_lut: constraint_lut,
             pre_constraints: pre_constraints,
             scores: scores,
         }
     }
 }
 
-impl<'a> ScoreMetric for ConstrainedDistance<'a>{
+impl<'a, 'b> ScoreMetric for ConstrainedDistance<'a, 'b>{
     fn get_min_score(&self) -> (usize, usize, f32) {
         get_min_score(&self.scores)
     }
 
     fn update(&mut self, i: usize, color: sRGB) {
-        self.pre_colors[i] = self.colors.get(&color);
-        self.pre_constraints[i] = self.constraints.get(&color);
+        self.pre_colors[i] = self.color_lut.get(&color);
+        self.pre_constraints[i] = self.constraint_lut.get(&color);
         update_scores_constrained(&mut self.scores, i, &self.pre_colors, &self.pre_constraints, &HyAB);
     }
 }

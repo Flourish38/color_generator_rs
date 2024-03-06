@@ -25,9 +25,9 @@ fn main() {
     //     }
     // }
     // println!("{}\t{}", max_dist.1, to_string(&max_dist.0))
-    let oklab_lut: SrgbLut<Oklab> = SrgbLut::new(|c| c.into());
-    let constraint_lut: SrgbLut<f32> = SrgbLut::new(|c1| {
-        let c = &oklab_lut.get(&c1);
+    let color_lut = SrgbLut::new(|c| c.into());
+    let constraint_lut = SrgbLut::new(|c1| {
+        let c = &color_lut.get(&c1);
         let v1 = HyAB(c, &[0x00, 0x00, 0x00].into());
         let v2 = HyAB(c, &[0xFF, 0xFF, 0xFF].into());
         return if v1 < v2 { v1 } else { v2 }
@@ -37,9 +37,9 @@ fn main() {
     
     let num_iter: u64 = 1000000000;
 
-    for big_num in 0..10 {
+    for big_num in 0..1 {
         let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
-        let mut score_metric = ConstrainedDistance::new(&colors, &oklab_lut, &constraint_lut);
+        let mut score_metric = ConstrainedDistance::new(&colors, &color_lut, &constraint_lut);
         let mut best = (-INFINITY, Vec::new());
 
         let start_time = Instant::now();

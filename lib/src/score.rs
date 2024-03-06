@@ -74,7 +74,6 @@ pub fn update_scores<T, F: Fn(&T, &T) -> f32>(
 
     // Recompute score of updated_index
     if updated_index < scores.len() {
-        // scores are 1 shorter than the colors vec
         scores[updated_index] = get_score(updated_index, pre_colors, dist)
     }
 }
@@ -102,7 +101,6 @@ pub fn update_scores_constrained<T, F: Fn(&T, &T) -> f32>(
 
     // Recompute score of updated_index
     if updated_index < scores.len() {
-        // scores are 1 shorter than the colors vec
         scores[updated_index] = get_score_constrained(updated_index, pre_colors, pre_constraints[updated_index], dist)
     }
 }
