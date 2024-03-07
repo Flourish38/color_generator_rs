@@ -26,6 +26,16 @@ impl<T: Copy> SrgbLut<T> {
     }
 }
 
+impl SrgbLut<f32> {
+    pub fn new_constraint<T2>(backgrounds: &Vec<T2>, f: impl Fn(&T2, &sRGB) -> f32) -> Self {
+        Self::new(|c| backgrounds.iter()
+            .map(|bg| f(bg, &c))
+            .min_by(|x, y| x.partial_cmp(y).unwrap())
+            .unwrap()
+        )
+    }
+}
+
 pub trait ScoreMetric {
     fn get_min_score(&self) -> (usize, usize, f32);
 
