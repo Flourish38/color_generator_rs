@@ -2,7 +2,7 @@ use crate::color::*;
 use crate::score::*;
 use itertools::Itertools;
 
-use crate::color::{sRGB, as_index};
+use crate::color::{as_index, sRGB};
 use itertools::iproduct;
 
 pub struct SrgbLut<T> {
@@ -28,11 +28,13 @@ impl<T: Copy> SrgbLut<T> {
 
 impl SrgbLut<f32> {
     pub fn new_constraint<T2>(backgrounds: &Vec<T2>, f: impl Fn(&T2, &sRGB) -> f32) -> Self {
-        Self::new(|c| backgrounds.iter()
-            .map(|bg| f(bg, &c))
-            .min_by(|x, y| x.partial_cmp(y).unwrap())
-            .unwrap()
-        )
+        Self::new(|c| {
+            backgrounds
+                .iter()
+                .map(|bg| f(bg, &c))
+                .min_by(|x, y| x.partial_cmp(y).unwrap())
+                .unwrap()
+        })
     }
 }
 
@@ -50,8 +52,12 @@ pub struct ConstrainedDistance<'a, 'b> {
     scores: Vec<(usize, f32)>,
 }
 
-impl<'a, 'b> ConstrainedDistance<'a, 'b>{
-    pub fn new(colors: &Vec<sRGB>, color_lut: &'a SrgbLut<Oklab>, constraint_lut: &'b SrgbLut<f32>) -> ConstrainedDistance<'a, 'b> {
+impl<'a, 'b> ConstrainedDistance<'a, 'b> {
+    pub fn new(
+        colors: &Vec<sRGB>,
+        color_lut: &'a SrgbLut<Oklab>,
+        constraint_lut: &'b SrgbLut<f32>,
+    ) -> ConstrainedDistance<'a, 'b> {
         let pre_colors = colors.iter().map(|c| color_lut.get(c)).collect_vec();
         let pre_constraints = colors.iter().map(|c| constraint_lut.get(c)).collect_vec();
         let scores = get_scores_constrained(&pre_colors, &pre_constraints, &HyAB);
@@ -65,7 +71,7 @@ impl<'a, 'b> ConstrainedDistance<'a, 'b>{
     }
 }
 
-impl<'a, 'b> ScoreMetric for ConstrainedDistance<'a, 'b>{
+impl<'a, 'b> ScoreMetric for ConstrainedDistance<'a, 'b> {
     fn get_min_score(&self) -> (usize, usize, f32) {
         get_min_score(&self.scores)
     }
@@ -73,6 +79,12 @@ impl<'a, 'b> ScoreMetric for ConstrainedDistance<'a, 'b>{
     fn update(&mut self, i: usize, color: sRGB) {
         self.pre_colors[i] = self.color_lut.get(&color);
         self.pre_constraints[i] = self.constraint_lut.get(&color);
-        update_scores_constrained(&mut self.scores, i, &self.pre_colors, &self.pre_constraints, &HyAB);
+        update_scores_constrained(
+            &mut self.scores,
+            i,
+            &self.pre_colors,
+            &self.pre_constraints,
+            &HyAB,
+        );
     }
 }

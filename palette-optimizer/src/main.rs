@@ -1,11 +1,11 @@
 extern crate lib;
 
-use std::{f32::INFINITY, iter::repeat_with, time::Instant};
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use itertools::Itertools;
 use lib::color::*;
 use lib::metric::*;
-use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use lib::update::*;
+use std::{f32::INFINITY, iter::repeat_with, time::Instant};
 
 fn main() {
     // let c1: sRGB = [0x00, 0x10, 0x0D];
@@ -25,15 +25,13 @@ fn main() {
     //     }
     // }
     // println!("{}\t{}", max_dist.1, to_string(&max_dist.0))
-    let bgs = [
-        [0x00, 0x00, 0x00],
-        [0xFF, 0xFF, 0xFF],
-    ];
+    let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
     let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
     let color_lut = SrgbLut::new(|c| c.into());
-    let constraint_lut = SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
+    let constraint_lut =
+        SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // println!("{}\t{}", constraint_lut.get(&[0xff, 0xff, 0xff]), constraint_lut.get(&[0x00, 0x00, 0x00]));
-    
+
     let num_iter: u64 = 1000000000;
 
     for big_num in 0..1 {
@@ -70,7 +68,7 @@ fn main() {
             best.1.iter().map(to_string).collect_vec()
         );
     }
-    
+
     // let oklab_best = best.1.iter().map(|c| From::from(*c)).collect_vec();
     // let best_scores = get_scores(&oklab_best, &HyAB);
     // let min_score = get_min_score(&best_scores);

@@ -22,7 +22,12 @@ pub fn get_scores<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, dist: &F) -> Vec
     return scores;
 }
 
-pub fn get_score_constrained<T, F: Fn(&T, &T) -> f32>(i: usize,  pre_colors: &Vec<T>, constraint: f32, dist: F) -> (usize, f32) {
+pub fn get_score_constrained<T, F: Fn(&T, &T) -> f32>(
+    i: usize,
+    pre_colors: &Vec<T>,
+    constraint: f32,
+    dist: F,
+) -> (usize, f32) {
     let c = &pre_colors[i];
     let mut score = (i, constraint);
     for j in (i + 1)..pre_colors.len() {
@@ -34,10 +39,19 @@ pub fn get_score_constrained<T, F: Fn(&T, &T) -> f32>(i: usize,  pre_colors: &Ve
     return score;
 }
 
-pub fn get_scores_constrained<T, F: Fn(&T, &T) -> f32>(pre_colors: &Vec<T>, pre_constraints: &Vec<f32>, dist: &F) -> Vec<(usize, f32)> {
+pub fn get_scores_constrained<T, F: Fn(&T, &T) -> f32>(
+    pre_colors: &Vec<T>,
+    pre_constraints: &Vec<f32>,
+    dist: &F,
+) -> Vec<(usize, f32)> {
     let mut scores = Vec::with_capacity(pre_colors.len());
     for i in 0..pre_colors.len() {
-        scores.push(get_score_constrained(i, pre_colors, pre_constraints[i], dist));
+        scores.push(get_score_constrained(
+            i,
+            pre_colors,
+            pre_constraints[i],
+            dist,
+        ));
     }
     return scores;
 }
@@ -101,6 +115,11 @@ pub fn update_scores_constrained<T, F: Fn(&T, &T) -> f32>(
 
     // Recompute score of updated_index
     if updated_index < scores.len() {
-        scores[updated_index] = get_score_constrained(updated_index, pre_colors, pre_constraints[updated_index], dist)
+        scores[updated_index] = get_score_constrained(
+            updated_index,
+            pre_colors,
+            pre_constraints[updated_index],
+            dist,
+        )
     }
 }
