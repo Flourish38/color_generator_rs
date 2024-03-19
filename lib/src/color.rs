@@ -74,3 +74,51 @@ impl From<sRGB> for Oklab {
 pub fn HyAB(c1: &Oklab, c2: &Oklab) -> f32 {
     return (c1.L - c2.L).abs() + ((c1.a - c2.a).powi(2) + (c1.b - c2.b).powi(2)).sqrt();
 }
+
+#[allow(non_snake_case)]
+fn apca_luminance(c: &sRGB) -> f32 {
+    const S_TRC: f32 = 2.4;
+    const B_THRSH: f32 = 0.022;
+    const B_CLIP: f32 = 1.414;
+
+    let Y_c = ((c[0] as f32) / 255.0).powf(S_TRC) * 0.2126729
+        + ((c[1] as f32) / 255.0).powf(S_TRC) * 0.7151522
+        + ((c[2] as f32) / 255.0).powf(S_TRC) * 0.0721750;
+
+    if Y_c < 0.0 {
+        0.0
+    } else if Y_c < B_THRSH {
+        Y_c + (B_THRSH - Y_c).powf(B_CLIP)
+    } else {
+        Y_c
+    }
+}
+
+// Implementation of https://github.com/Myndex/SAPC-APCA/blob/master/documentation/APCA-W3-LaTeX.md.
+// Accessed 2024-03-19.
+#[allow(non_snake_case)]
+pub fn APCA(text: &sRGB, bg: &sRGB) -> f32 {
+    const NTX: f32 = 0.57;
+    const NBG: f32 = 0.56;
+    const RTX: f32 = 0.62;
+    const RGB: f32 = 0.65;
+    const W_SCALE: f32 = 1.14;
+    const W_OFFSET: f32 = 0.027;
+
+    let Y_txt = apca_luminance(text);
+    let Y_bg = apca_luminance(bg);
+
+    let S_apc = if Y_txt < Y_bg {
+        Y_bg.powf(NBG) - Y_txt.powf(NTX)
+    } else {
+        Y_bg.powf(RGB) - Y_txt.powf(RTX)
+    } * W_SCALE;
+
+    if S_apc.abs() < W_OFFSET {
+        0.0
+    } else if S_apc > 0.0 {
+        100.0 * (S_apc - W_OFFSET)
+    } else {
+        100.0 * (S_apc + W_OFFSET)
+    }
+}
