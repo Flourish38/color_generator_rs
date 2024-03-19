@@ -42,6 +42,8 @@ pub trait ScoreMetric {
     fn get_min_score(&self) -> (usize, usize, f32);
 
     fn update(&mut self, i: usize, color: sRGB);
+
+    fn test_improvement(&self, i: usize, updated_index: usize, updated_color: sRGB) -> bool;
 }
 
 pub struct ConstrainedDistance<'a, 'b> {
@@ -86,5 +88,17 @@ impl<'a, 'b> ScoreMetric for ConstrainedDistance<'a, 'b> {
             &self.pre_constraints,
             &HyAB,
         );
+    }
+
+    fn test_improvement(&self, i: usize, updated_index: usize, updated_color: sRGB) -> bool {
+        let (j, prev_score) = self.scores[i];
+        if i == j {
+            return self.constraint_lut.get(&updated_color) > prev_score;
+        }
+        let new_color = self.color_lut.get(&updated_color);
+        let other_index = if i == updated_index { j } else { i };
+        let other_color = self.pre_colors[other_index];
+        let new_score = HyAB(&new_color, &other_color);
+        return new_score > prev_score;
     }
 }

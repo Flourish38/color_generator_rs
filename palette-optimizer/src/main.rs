@@ -34,7 +34,7 @@ fn main() {
 
     let num_iter: u64 = 1000000000;
 
-    for big_num in 0..1 {
+    for big_num in 0..5 {
         let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
         let mut score_metric = ConstrainedDistance::new(&colors, &color_lut, &constraint_lut);
         let mut best = (-INFINITY, Vec::new());
@@ -57,7 +57,10 @@ fn main() {
                 //     to_string(&colors[j])
                 // );
             }
-            let (index, new_color) = update_color(&colors, (i, j));
+            let (mut index, mut new_color) = update_color(&colors, (i, j));
+            if !score_metric.test_improvement(i, index, new_color) {
+                (index, new_color) = update_color(&colors, (i, j));
+            }
             colors[index] = new_color;
             score_metric.update(index, colors[index]);
         }
