@@ -119,6 +119,45 @@ pub fn APCA(text: &sRGB, bg: &sRGB) -> f32 {
     } else if S_apc > 0.0 {
         100.0 * (S_apc - W_OFFSET)
     } else {
-        100.0 * (S_apc + W_OFFSET)
+        -100.0 * (S_apc + W_OFFSET)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_abs_diff_eq;
+
+    // Source: https://git.apcacontrast.com/documentation/README
+    // Accessed 2023-03-19.
+    #[test]
+    fn test_apca() {
+        let c_888: sRGB = [0x88, 0x88, 0x88];
+        let c_fff: sRGB = [0xff, 0xff, 0xff];
+        let c_000: sRGB = [0x00, 0x00, 0x00];
+        let c_aaa: sRGB = [0xaa, 0xaa, 0xaa];
+        let c_123: sRGB = [0x11, 0x22, 0x33];
+        let c_def: sRGB = [0xdd, 0xee, 0xff];
+        let c_444: sRGB = [0x44, 0x44, 0x44];
+        let c_234: sRGB = [0x22, 0x33, 0x44];
+
+        // This epsilon is exactly correct, since the result never exceeds 2^7 and f32 has 24 mantissa bits.
+        let eps = 2.0_f32.powi(-17);
+
+        assert_abs_diff_eq!(63.056469930209424, APCA(&c_888, &c_fff), epsilon = eps);
+        assert_abs_diff_eq!(68.54146436644962, APCA(&c_fff, &c_888), epsilon = eps);
+
+        assert_abs_diff_eq!(58.146262578561334, APCA(&c_000, &c_aaa), epsilon = eps);
+        assert_abs_diff_eq!(56.24113336839742, APCA(&c_aaa, &c_000), epsilon = eps);
+
+        assert_abs_diff_eq!(91.66830811481631, APCA(&c_123, &c_def), epsilon = eps);
+        assert_abs_diff_eq!(93.06770049484275, APCA(&c_def, &c_123), epsilon = eps);
+
+        assert_abs_diff_eq!(8.32326136957393, APCA(&c_123, &c_444), epsilon = eps);
+        assert_abs_diff_eq!(7.526878460278154, APCA(&c_444, &c_123), epsilon = eps);
+
+        // Low-contrast
+        assert_abs_diff_eq!(1.7512243099356113, APCA(&c_123, &c_234), epsilon = eps);
+        assert_abs_diff_eq!(1.6349191031377903, APCA(&c_234, &c_123), epsilon = eps);
     }
 }
