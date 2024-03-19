@@ -57,7 +57,8 @@ fn main() {
                 //     to_string(&colors[j])
                 // );
             }
-            let index = update_color(&mut colors, (i, j));
+            let (index, new_color) = update_color(&colors, (i, j));
+            colors[index] = new_color;
             score_metric.update(index, colors[index]);
         }
         println!(

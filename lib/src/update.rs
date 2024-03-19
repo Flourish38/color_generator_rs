@@ -44,7 +44,7 @@ static UPDATE_SLICE: Lazy<Vec<ColorUpdate>> = Lazy::new(|| {
 static UPDATE_DISTRIBUTION: Lazy<distributions::Slice<'static, ColorUpdate>> =
     Lazy::new(|| distributions::Slice::new(UPDATE_SLICE.as_slice()).expect("Slice empty"));
 
-pub fn update_color(colors: &mut Vec<sRGB>, (i, j): (usize, usize)) -> usize {
+pub fn update_color(colors: &Vec<sRGB>, (i, j): (usize, usize)) -> (usize, sRGB) {
     let cu = UPDATE_DISTRIBUTION.sample(&mut thread_rng());
     let (index, num) = match cu.which {
         Which::First => match cu.sign {
@@ -60,6 +60,7 @@ pub fn update_color(colors: &mut Vec<sRGB>, (i, j): (usize, usize)) -> usize {
             Sign::Negative => (j, 0xFF),
         },
     };
-    colors[index][cu.axis as usize] += num;
-    index
+    let mut out_color = colors[index];
+    out_color[cu.axis as usize] += num;
+    (index, out_color)
 }
