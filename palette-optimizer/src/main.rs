@@ -1,6 +1,6 @@
 extern crate lib;
 
-use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use lib::color::*;
 use lib::metric::*;
@@ -26,26 +26,30 @@ fn main() {
     // }
     // println!("{}\t{}", max_dist.1, to_string(&max_dist.0))
     let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
-    let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
-    let color_lut = SrgbLut::new(|c| c.into());
-    let constraint_lut =
-        SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
+    // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
+    // let color_lut = SrgbLut::new(|c| c.into());
+    // let constraint_lut =
+    //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // println!("{}\t{}", constraint_lut.get(&[0xff, 0xff, 0xff]), constraint_lut.get(&[0x00, 0x00, 0x00]));
+    let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
 
-    let num_iter: u64 = 1000000000;
+    let num_iter: u64 = 10000000;
+    let update_freq: u64 = 1000000;
 
     for big_num in 0..5 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
-        let mut score_metric = ConstrainedDistance::new(&colors, &color_lut, &constraint_lut);
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(1).collect_vec();
+        let mut score_metric = ConstraintOnly::new(&colors, &apca_constraint_lut);
         let mut best = (-INFINITY, Vec::new());
 
         let start_time = Instant::now();
-        for _it in (0..num_iter).progress_with(
-            ProgressBar::new(num_iter).with_style(ProgressStyle::with_template(
-                "{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}",
-            )
-            .unwrap(),
-        )) {
+        let pb = ProgressBar::new(num_iter).with_style(ProgressStyle::with_template(
+            "{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}",
+        ).unwrap());
+
+        for _it in 0..num_iter {
+            if _it % update_freq == 0 {
+                pb.inc(update_freq)
+            }
             let (i, j, score) = score_metric.get_min_score();
             if score > best.0 {
                 best = (score, colors.clone());
@@ -58,12 +62,13 @@ fn main() {
                 // );
             }
             let (mut index, mut new_color) = update_color(&colors, (i, j));
-            if !score_metric.test_improvement(i, index, new_color) {
+            if !score_metric.test_improvement(i, index, &new_color) {
                 (index, new_color) = update_color(&colors, (i, j));
             }
             colors[index] = new_color;
             score_metric.update(index, colors[index]);
         }
+        pb.finish_and_clear();
         println!(
             "{}:\t{:#?}\t{}\t{:?}",
             big_num,
@@ -71,6 +76,7 @@ fn main() {
             best.0,
             best.1.iter().map(to_string).collect_vec()
         );
+        // 's/[\[" #]//g'
     }
 
     // let oklab_best = best.1.iter().map(|c| From::from(*c)).collect_vec();
