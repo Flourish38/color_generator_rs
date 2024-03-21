@@ -1,6 +1,5 @@
 use crate::color::*;
 use crate::score::*;
-use itertools::enumerate;
 use itertools::Itertools;
 
 use crate::color::{as_index, sRGB};
@@ -106,35 +105,66 @@ impl<'a, 'b> ScoreMetric for ConstrainedDistance<'a, 'b> {
     }
 }
 
+// pub struct ConstraintOnly<'a> {
+//     constraint_lut: &'a SrgbLut<f32>,
+//     scores: Vec<f32>,
+// }
+
+// impl<'a> ConstraintOnly<'a> {
+//     pub fn new(colors: &Vec<sRGB>, constraint_lut: &'a SrgbLut<f32>) -> Self {
+//         let scores = colors.iter().map(|c| constraint_lut.get(c)).collect_vec();
+//         ConstraintOnly {
+//             constraint_lut: constraint_lut,
+//             scores: scores,
+//         }
+//     }
+// }
+
+// impl<'a> ScoreMetric for ConstraintOnly<'a> {
+//     fn get_min_score(&self) -> (usize, usize, f32) {
+//         let (i, val) = enumerate(&self.scores)
+//             .min_by(|x, y| x.1.partial_cmp(y.1).unwrap())
+//             .unwrap();
+//         (i, i, *val)
+//     }
+
+//     fn update(&mut self, i: usize, color: sRGB) {
+//         self.scores[i] = self.constraint_lut.get(&color);
+//     }
+
+//     fn test_improvement(&self, i: usize, updated_index: usize, updated_color: &sRGB) -> bool {
+//         let _ = i;
+//         self.constraint_lut.get(updated_color) > self.scores[updated_index]
+//     }
+// }
+
 pub struct ConstraintOnly<'a> {
     constraint_lut: &'a SrgbLut<f32>,
-    scores: Vec<f32>,
+    scores: Scores,
 }
 
 impl<'a> ConstraintOnly<'a> {
     pub fn new(colors: &Vec<sRGB>, constraint_lut: &'a SrgbLut<f32>) -> Self {
-        let scores = colors.iter().map(|c| constraint_lut.get(c)).collect_vec();
+        let data = colors.iter().map(|c| constraint_lut.get(c)).collect_vec();
         ConstraintOnly {
             constraint_lut: constraint_lut,
-            scores: scores,
+            scores: Scores::new(&data),
         }
     }
 }
 
 impl<'a> ScoreMetric for ConstraintOnly<'a> {
     fn get_min_score(&self) -> (usize, usize, f32) {
-        let (i, val) = enumerate(&self.scores)
-            .min_by(|x, y| x.1.partial_cmp(y.1).unwrap())
-            .unwrap();
-        (i, i, *val)
+        let (val, i) = self.scores.get_min_score();
+        (i, i, val)
     }
 
     fn update(&mut self, i: usize, color: sRGB) {
-        self.scores[i] = self.constraint_lut.get(&color);
+        self.scores.update(i, self.constraint_lut.get(&color));
     }
 
     fn test_improvement(&self, i: usize, updated_index: usize, updated_color: &sRGB) -> bool {
-        let _ = i;
-        self.constraint_lut.get(updated_color) > self.scores[updated_index]
+        let _ = (i, updated_index);
+        self.constraint_lut.get(updated_color) > self.scores.get_min_score().0
     }
 }
