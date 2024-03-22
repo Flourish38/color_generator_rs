@@ -31,20 +31,20 @@ fn main() {
     //     }
     // }
     // println!("{}\t{}", max_dist.1, to_string(&max_dist.0))
-    let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
+    //    let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
     // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
-    // let color_lut = SrgbLut::new(|c| c.into());
+    let color_lut = SrgbLut::new(|c| c.into());
     // let constraint_lut =
     //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // println!("{}\t{}", constraint_lut.get(&[0xff, 0xff, 0xff]), constraint_lut.get(&[0x00, 0x00, 0x00]));
-    let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
+    // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
 
-    let num_iter: u64 = 10000000;
+    let num_iter: u64 = 1000000000;
     let update_freq: u64 = 1000000;
     // breakpoint();
     for big_num in 0..5 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(1).collect_vec();
-        let mut score_metric = ConstraintOnly::new(&colors, &apca_constraint_lut);
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
+        let mut score_metric = PairDistance::new(&colors, &color_lut);
         let mut best = (-INFINITY, Vec::new());
 
         let start_time = Instant::now();
@@ -56,7 +56,7 @@ fn main() {
             if _it % update_freq == 0 {
                 pb.inc(update_freq)
             }
-            let (i, j, score) = score_metric.get_min_score();
+            let (score, ind) = score_metric.get_min_score();
             if score > best.0 {
                 best = (score, colors.clone());
                 // println!(
@@ -67,12 +67,12 @@ fn main() {
                 //     to_string(&colors[j])
                 // );
             }
-            let (mut index, mut new_color) = update_color(&colors, (i, j));
-            if !score_metric.test_improvement(i, index, &new_color) {
-                (index, new_color) = update_color(&colors, (i, j));
+            let (mut index, mut new_color) = update_color_pair(&colors, ind);
+            if !score_metric.test_improvement(index, &new_color) {
+                (index, new_color) = update_color_pair(&colors, ind);
             }
             colors[index] = new_color;
-            score_metric.update(index, colors[index]);
+            score_metric.update(index, &colors[index]);
         }
         pb.finish_and_clear();
         println!(

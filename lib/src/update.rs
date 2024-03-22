@@ -4,9 +4,12 @@ use rand::{distributions, distributions::Distribution, thread_rng};
 
 use crate::color::sRGB;
 
-#[derive(Debug)]
-struct ColorUpdate {
+struct ColorPairUpdate {
     which: Which,
+    cu: ColorUpdate,
+}
+
+struct ColorUpdate {
     axis: Axis,
     sign: Sign,
 }
@@ -22,45 +25,59 @@ enum Axis {
     G = 1,
     B = 2,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum Sign {
     Positive,
     Negative,
 }
 
+fn color_update(mut c: sRGB, cu: &ColorUpdate) -> sRGB {
+    let axis = cu.axis as usize;
+    let num = if c[axis] == 0x00 || cu.sign == Sign::Positive {
+        0x01
+    } else {
+        0xFF
+    };
+    c[axis] += num;
+    c
+}
+
 static UPDATE_SLICE: Lazy<Vec<ColorUpdate>> = Lazy::new(|| {
     iproduct!(
-        [Which::First, Which::Second],
         [Axis::R, Axis::G, Axis::B],
         [Sign::Positive, Sign::Negative]
     )
-    .map(|(w, a, s)| ColorUpdate {
-        which: w,
-        axis: a,
-        sign: s,
-    })
+    .map(|(a, s)| ColorUpdate { axis: a, sign: s })
     .collect_vec()
 });
 static UPDATE_DISTRIBUTION: Lazy<distributions::Slice<'static, ColorUpdate>> =
     Lazy::new(|| distributions::Slice::new(UPDATE_SLICE.as_slice()).expect("Slice empty"));
 
-pub fn update_color(colors: &Vec<sRGB>, (i, j): (usize, usize)) -> (usize, sRGB) {
+pub fn update_color(colors: &Vec<sRGB>, i: usize) -> sRGB {
     let cu = UPDATE_DISTRIBUTION.sample(&mut thread_rng());
-    let (index, num) = match cu.which {
-        Which::First => match cu.sign {
-            Sign::Positive if colors[i][cu.axis as usize] == 0xFF => (j, 0xFF),
-            Sign::Negative if colors[i][cu.axis as usize] == 0x00 => (j, 0x01),
-            Sign::Positive => (i, 0x01),
-            Sign::Negative => (i, 0xFF),
-        },
-        Which::Second => match cu.sign {
-            Sign::Positive if colors[j][cu.axis as usize] == 0xFF => (i, 0xFF),
-            Sign::Negative if colors[j][cu.axis as usize] == 0x00 => (i, 0x01),
-            Sign::Positive => (j, 0x01),
-            Sign::Negative => (j, 0xFF),
-        },
+    color_update(colors[i], cu)
+}
+
+static UPDATE_PAIR_SLICE: Lazy<Vec<ColorPairUpdate>> = Lazy::new(|| {
+    iproduct!(
+        [Which::First, Which::Second],
+        [Axis::R, Axis::G, Axis::B],
+        [Sign::Positive, Sign::Negative]
+    )
+    .map(|(w, a, s)| ColorPairUpdate {
+        which: w,
+        cu: ColorUpdate { axis: a, sign: s },
+    })
+    .collect_vec()
+});
+static UPDATE_PAIR_DISTRIBUTION: Lazy<distributions::Slice<'static, ColorPairUpdate>> =
+    Lazy::new(|| distributions::Slice::new(UPDATE_PAIR_SLICE.as_slice()).expect("Slice empty"));
+
+pub fn update_color_pair(colors: &Vec<sRGB>, (i, j): (usize, usize)) -> (usize, sRGB) {
+    let cu = UPDATE_PAIR_DISTRIBUTION.sample(&mut thread_rng());
+    let index = match cu.which {
+        Which::First => i,
+        Which::Second => j,
     };
-    let mut out_color = colors[index];
-    out_color[cu.axis as usize] += num;
-    (index, out_color)
+    (index, color_update(colors[index], &cu.cu))
 }
