@@ -7,6 +7,12 @@ use lib::metric::*;
 use lib::update::*;
 use std::{f32::INFINITY, iter::repeat_with, time::Instant};
 
+#[allow(dead_code)]
+fn breakpoint() {
+    let mut buf = String::new();
+    std::io::stdin().read_line(&mut buf).unwrap();
+}
+
 fn main() {
     // let c1: sRGB = [0x00, 0x10, 0x0D];
     // let c2: sRGB = [0x03, 0x00, 0x05];
@@ -35,7 +41,7 @@ fn main() {
 
     let num_iter: u64 = 10000000;
     let update_freq: u64 = 1000000;
-
+    // breakpoint();
     for big_num in 0..5 {
         let mut colors: Vec<sRGB> = repeat_with(rand::random).take(1).collect_vec();
         let mut score_metric = ConstraintOnly::new(&colors, &apca_constraint_lut);
@@ -89,4 +95,5 @@ fn main() {
     //     to_string(&best.1[min_score.1])
     // );
     // assert_eq!(best.0, min_score.2)
+    // breakpoint();
 }
