@@ -43,8 +43,11 @@ pub struct Oklab {
 // This is a scale factor to make it roughly line up with CIELAB.
 // It's actually completely optional, but I think it makes the numbers nicer
 const OKLAB_SCALE: f32 = 100.0;
+
 impl From<RGB> for Oklab {
     fn from(c: RGB) -> Self {
+        // Copied from https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab.
+        // Accessed 2024-01-30.
         let l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
         let m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
         let s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
@@ -132,7 +135,7 @@ struct LMS {
 
 impl From<RGB> for LMS {
     fn from(c: RGB) -> Self {
-        // Matrix derived in src/color_derivations.jl. Result of line 20.
+        // Matrix derived in src/color_derivations.jl. Result of line 29.
         LMS {
             l: 0.178824041258 * c.r + 0.43516090570 * c.g + 0.04119349692 * c.b,
             m: 0.034556423182 * c.r + 0.27155382458 * c.g + 0.03867130836 * c.b,
@@ -149,7 +152,7 @@ impl From<sRGB> for LMS {
 
 impl From<LMS> for RGB {
     fn from(c: LMS) -> Self {
-        // Matrix derived in src/color_derivations.jl. Result of line 24.
+        // Matrix derived in src/color_derivations.jl. Result of line 33.
         RGB {
             r: 8.09443559803237000 * c.l - 13.050431460496924 * c.m + 11.672058453917323 * c.s,
             g: -1.02485055866466830 * c.l + 5.4019313096749730 * c.m - 11.361471490598714 * c.s,
@@ -162,6 +165,60 @@ impl From<LMS> for Oklab {
     fn from(c: LMS) -> Self {
         Into::<RGB>::into(c).into()
     }
+}
+
+impl LMS {
+    // Derived in src/color_derivations.jl. Result of line 116.
+    fn simulate_protan(self) -> Self {
+        let l = if -0.016813516536 * self.m + 0.344781556122 * self.s > 0.0 {
+            2.1683061543738997 * self.m - 5.496382983183359 * self.s
+        } else {
+            2.18614812275877 * self.m - 5.862254192269454 * self.s
+        };
+        LMS {
+            l: l,
+            m: self.m,
+            s: self.s,
+        }
+    }
+
+    // Derived in src/color_derivations.jl. Result of line 117.
+    fn simulate_deutan(self) -> Self {
+        let m = if -0.016813516536 * self.l + 0.655178443878 * self.s > 0.0 {
+            0.4611894856189028 * self.l + 2.5348740407788237 * self.s
+        } else {
+            0.45742554659931645 * self.l + 2.681544828202989 * self.s
+        };
+        LMS {
+            l: self.l,
+            m: m,
+            s: self.s,
+        }
+    }
+
+    // Derived in src/color_derivations.jl. Result of line 118.
+    fn simulate_tritan(self) -> Self {
+        let s = if -0.344781556121 * self.l + 0.655178443878 * self.m > 0.0 {
+            -0.06010959444193691 * self.l + 0.1629902356630733 * self.m
+        } else {
+            -0.002574363979654964 * self.l + 0.05365769715251148 * self.m
+        };
+        LMS {
+            l: self.l,
+            m: self.m,
+            s: s,
+        }
+    }
+}
+
+pub fn simulate_protan(c: sRGB) -> Oklab {
+    Into::<LMS>::into(c).simulate_protan().into()
+}
+pub fn simulate_deutan(c: sRGB) -> Oklab {
+    Into::<LMS>::into(c).simulate_deutan().into()
+}
+pub fn simulate_tritan(c: sRGB) -> Oklab {
+    Into::<LMS>::into(c).simulate_tritan().into()
 }
 
 #[cfg(test)]
