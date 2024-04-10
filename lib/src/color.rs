@@ -16,7 +16,7 @@ pub fn to_string(c: &sRGB) -> String {
 }
 
 #[derive(Debug)]
-pub struct RGB {
+struct RGB {
     r: f32,
     g: f32,
     b: f32,
@@ -33,7 +33,7 @@ impl From<sRGB> for RGB {
 }
 
 #[allow(non_snake_case)]
-#[derive(PartialEq, Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Oklab {
     L: f32,
     a: f32,
@@ -123,10 +123,52 @@ pub fn APCA(text: &sRGB, bg: &sRGB) -> f32 {
     }
 }
 
+#[allow(non_snake_case)]
+struct LMS {
+    l: f32,
+    m: f32,
+    s: f32,
+}
+
+impl From<RGB> for LMS {
+    fn from(c: RGB) -> Self {
+        // Matrix derived in src/color_derivations.jl. Result of line 20.
+        LMS {
+            l: 0.178824041258 * c.r + 0.43516090570 * c.g + 0.04119349692 * c.b,
+            m: 0.034556423182 * c.r + 0.27155382458 * c.g + 0.03867130836 * c.b,
+            s: 0.000299565576 * c.r + 0.00184308960 * c.g + 0.01467086130 * c.b,
+        }
+    }
+}
+
+impl From<sRGB> for LMS {
+    fn from(c: sRGB) -> Self {
+        Into::<RGB>::into(c).into()
+    }
+}
+
+impl From<LMS> for RGB {
+    fn from(c: LMS) -> Self {
+        // Matrix derived in src/color_derivations.jl. Result of line 24.
+        RGB {
+            r: 8.09443559803237000 * c.l - 13.050431460496924 * c.m + 11.672058453917323 * c.s,
+            g: -1.02485055866466830 * c.l + 5.4019313096749730 * c.m - 11.361471490598714 * c.s,
+            b: -0.03652974715933317 * c.l - 0.4121628070012680 * c.m + 69.351324238208580 * c.s,
+        }
+    }
+}
+
+impl From<LMS> for Oklab {
+    fn from(c: LMS) -> Self {
+        Into::<RGB>::into(c).into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use approx::assert_abs_diff_eq;
+    use itertools::iproduct;
 
     // Source: https://git.apcacontrast.com/documentation/README
     // Accessed 2023-03-19.
@@ -159,5 +201,21 @@ mod tests {
         // Low-contrast
         assert_abs_diff_eq!(1.7512243099356113, APCA(&c_123, &c_234), epsilon = eps);
         assert_abs_diff_eq!(1.6349191031377903, APCA(&c_234, &c_123), epsilon = eps);
+    }
+
+    #[test]
+    fn test_lms_roundtrip() {
+        for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
+            let c = [r, g, b];
+            let c_rgb: RGB = c.into();
+            let c_lms: LMS = c.into(); // This goes through RGB first
+            let c_lms_rgb: RGB = c_lms.into();
+
+            // This epsilon is more than sufficient for my needs, and probably close to perfect.
+            let eps = 2.0_f32.powi(-19);
+            assert_abs_diff_eq!(&c_rgb.r, &c_lms_rgb.r, epsilon = eps);
+            assert_abs_diff_eq!(&c_rgb.g, &c_lms_rgb.g, epsilon = eps);
+            assert_abs_diff_eq!(&c_rgb.b, &c_lms_rgb.b, epsilon = eps);
+        }
     }
 }
