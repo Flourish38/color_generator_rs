@@ -3,14 +3,14 @@ use svg::node::element::Path;
 use svg::node::Value;
 use svg::Document;
 
-const CENTER: (f32, f32) = (50.0, 50.0);
+const SIZE: f64 = 100.0;
 
-fn get_position(radius: f32, angle: f32) -> (f32, f32) {
+fn get_position(radius: f64, angle: f64) -> (f64, f64) {
     let (sin, cos) = angle.sin_cos();
-    (sin * radius + CENTER.0, cos * radius + CENTER.1)
+    (sin * radius, cos * radius)
 }
 
-fn make_slice<T: ?Sized>((r1, r2): (f32, f32), (angle_1, angle_2): (f32, f32), color: &T) -> Path
+fn make_slice<T: ?Sized>((r1, r2): (f64, f64), (angle_1, angle_2): (f64, f64), color: &T) -> Path
 where
     Value: for<'a> From<&'a T>,
 {
@@ -34,7 +34,7 @@ where
     Path::new().set("fill", color).set("d", data)
 }
 
-fn make_ring<T: ?Sized>(radii: (f32, f32), start_angle: f32, colors: Vec<&T>) -> Vec<Path>
+fn make_ring<T: ?Sized>(radii: (f64, f64), start_angle: f64, colors: Vec<&T>) -> Vec<Path>
 where
     Value: for<'a> From<&'a T>,
 {
@@ -42,13 +42,13 @@ where
     if n == 1 {
         return make_ring(radii, start_angle, vec![colors[0], colors[0]]);
     }
-    let angle_offset = std::f32::consts::TAU / n as f32;
+    let angle_offset = std::f64::consts::TAU / n as f64;
     colors
         .iter()
         .enumerate()
         .map(|(i, color)| {
-            let angle_1 = start_angle + i as f32 * angle_offset;
-            let angle_2 = start_angle + (i + 1) as f32 * angle_offset;
+            let angle_1 = start_angle + i as f64 * angle_offset;
+            let angle_2 = start_angle + (i + 1) as f64 * angle_offset;
             make_slice(radii, (angle_1, angle_2), color)
         })
         .collect()
@@ -60,13 +60,13 @@ fn make_document(rings: Vec<Vec<Path>>) -> Document {
         .fold(Document::new(), |doc, paths| {
             paths.into_iter().fold(doc, |doc, path| doc.add(path))
         })
-        .set("viewBox", (0, 0, 100, 100))
+        .set("viewBox", (-SIZE / 2.0, -SIZE / 2.0, SIZE, SIZE))
 }
 
 fn main() {
     let document = make_document(vec![
-        make_ring((15.0, 25.0), 25.0_f32.to_radians(), vec!["green", "red"]),
-        make_ring((0.0, 15.0), -15.0_f32.to_radians(), vec!["blue", "yellow"]),
+        make_ring((15.0, 25.0), 25.0_f64.to_radians(), vec!["green", "red"]),
+        make_ring((0.0, 15.0), -15.0_f64.to_radians(), vec!["blue", "yellow"]),
     ]);
 
     svg::save("image.svg", &document).unwrap();
