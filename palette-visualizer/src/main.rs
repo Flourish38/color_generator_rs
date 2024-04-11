@@ -54,19 +54,20 @@ where
         .collect()
 }
 
-fn make_document(paths: Vec<Path>) -> Document {
-    paths
+fn make_document(rings: Vec<Vec<Path>>) -> Document {
+    rings
         .into_iter()
-        .fold(Document::new(), |doc, path| doc.add(path))
+        .fold(Document::new(), |doc, paths| {
+            paths.into_iter().fold(doc, |doc, path| doc.add(path))
+        })
         .set("viewBox", (0, 0, 100, 100))
 }
 
 fn main() {
-    let document = make_document(make_ring(
-        (15.0, 25.0),
-        25.0_f32.to_radians(),
-        vec!["green"],
-    ));
+    let document = make_document(vec![
+        make_ring((15.0, 25.0), 25.0_f32.to_radians(), vec!["green", "red"]),
+        make_ring((0.0, 15.0), -15.0_f32.to_radians(), vec!["blue", "yellow"]),
+    ]);
 
     svg::save("image.svg", &document).unwrap();
 }
