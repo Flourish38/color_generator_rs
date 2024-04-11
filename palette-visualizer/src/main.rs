@@ -1,5 +1,6 @@
 use svg::node::element::path::Data;
 use svg::node::element::Path;
+use svg::node::Value;
 use svg::Document;
 
 const CENTER: (f32, f32) = (50.0, 50.0);
@@ -9,11 +10,10 @@ fn get_position(radius: f32, angle: f32) -> (f32, f32) {
     (sin * radius + CENTER.0, cos * radius + CENTER.1)
 }
 
-fn make_slice<T: Into<svg::node::Value>>(
-    (r1, r2): (f32, f32),
-    (angle_1, angle_2): (f32, f32),
-    color: T,
-) -> Path {
+fn make_slice<T: ?Sized>((r1, r2): (f32, f32), (angle_1, angle_2): (f32, f32), color: &T) -> Path
+where
+    Value: for<'a> From<&'a T>,
+{
     let inner_radius = r1.min(r2);
     let outer_radius = r1.max(r2);
     let start_angle = angle_1.min(angle_2);
@@ -34,34 +34,36 @@ fn make_slice<T: Into<svg::node::Value>>(
     Path::new().set("fill", color).set("d", data)
 }
 
-fn main() {
-    let slice = make_slice(
-        (15.0, 25.0),
-        (15.0_f32.to_radians(), 105.0_f32.to_radians()),
-        "red",
-    );
-    let slice2 = make_slice(
-        (15.0, 30.0),
-        (105.0_f32.to_radians(), 195.0_f32.to_radians()),
-        "yellow",
-    );
-    let slice3 = make_slice(
-        (15.0, 35.0),
-        (195.0_f32.to_radians(), 285.0_f32.to_radians()),
-        "green",
-    );
-    let slice4 = make_slice(
-        (15.0, 40.0),
-        (285.0_f32.to_radians(), 375.0_f32.to_radians()),
-        "blue",
-    );
+fn make_ring<T: ?Sized>(radii: (f32, f32), start_angle: f32, colors: Vec<&T>) -> Vec<Path>
+where
+    Value: for<'a> From<&'a T>,
+{
+    let n = colors.len() as f32;
+    let angle_offset = std::f32::consts::TAU / n;
+    colors
+        .iter()
+        .enumerate()
+        .map(|(i, color)| {
+            let angle_1 = start_angle + i as f32 * angle_offset;
+            let angle_2 = start_angle + (i + 1) as f32 * angle_offset;
+            make_slice(radii, (angle_1, angle_2), color)
+        })
+        .collect()
+}
 
-    let document = Document::new()
+fn make_document(paths: Vec<Path>) -> Document {
+    paths
+        .into_iter()
+        .fold(Document::new(), |doc, path| doc.add(path))
         .set("viewBox", (0, 0, 100, 100))
-        .add(slice)
-        .add(slice2)
-        .add(slice3)
-        .add(slice4);
+}
+
+fn main() {
+    let document = make_document(make_ring(
+        (15.0, 25.0),
+        25.0_f32.to_radians(),
+        vec!["red", "yellow", "green", "blue"],
+    ));
 
     svg::save("image.svg", &document).unwrap();
 }
