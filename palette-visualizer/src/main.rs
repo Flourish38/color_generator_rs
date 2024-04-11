@@ -38,8 +38,11 @@ fn make_ring<T: ?Sized>(radii: (f32, f32), start_angle: f32, colors: Vec<&T>) ->
 where
     Value: for<'a> From<&'a T>,
 {
-    let n = colors.len() as f32;
-    let angle_offset = std::f32::consts::TAU / n;
+    let n = colors.len();
+    if n == 1 {
+        return make_ring(radii, start_angle, vec![colors[0], colors[0]]);
+    }
+    let angle_offset = std::f32::consts::TAU / n as f32;
     colors
         .iter()
         .enumerate()
@@ -62,7 +65,7 @@ fn main() {
     let document = make_document(make_ring(
         (15.0, 25.0),
         25.0_f32.to_radians(),
-        vec!["red", "yellow", "green", "blue"],
+        vec!["green"],
     ));
 
     svg::save("image.svg", &document).unwrap();
