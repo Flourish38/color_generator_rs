@@ -377,82 +377,104 @@ fn main() {
         // [[0x00, 0x00, 0x00].into(), [0xFF, 0xFF, 0xFF].into()].iter().map(|c2| HyAB(c, c2)).min_by(|x, y| PartialOrd::partial_cmp(x, y).unwrap()).unwrap()
     });
     // println!("{}\t{}", constraint_lut.get(&[0xff, 0xff, 0xff]), constraint_lut.get(&[0x00, 0x00, 0x00]));
+    for very_big_index in 0..10 {
+        let max_iter: u64 = 100000000;
+        let min_iter: u64 = 100;
+        let step: u64 = 10;
 
-    let max_iter: u64 = 1000000000;
-    let min_iter: u64 = 100;
-    let step: u64 = 10;
+        let mut num_iter = min_iter;
+        let mut num_tries = max_iter / num_iter;
 
-    let mut num_iter = min_iter;
-    let mut num_tries = max_iter / num_iter;
+        let mut best = (-INFINITY, repeat_with(rand::random).take(3).collect_vec());
 
-    let mut best = (-INFINITY, repeat_with(rand::random).take(20).collect_vec());
+        let start_time = Instant::now();
 
-    let start_time = Instant::now();
-    while num_iter <= max_iter {
-        println!(
-            "{:#?}:\t{} tries of {} iterations",
-            start_time.elapsed(),
-            num_tries,
-            num_iter
-        );
-        let mut try_counter = 0;
-        while try_counter < num_tries {
-            try_counter += 1;
-            // Theoretically this is quite fast
-            let mut score_metric =
-                ConstrainedDistance::new(best.1.clone(), &oklab_lut, &constraint_lut);
-            let mut iter_counter = 0;
-            while iter_counter < num_iter {
-                iter_counter += 1;
-                let (i, j, score) = score_metric.get_min_score();
-                if score > best.0 {
-                    best = (score, score_metric.get_colors());
-                    println!(
-                        "{:#?}\t{}\t{}\t{}\t{}\t{}",
-                        start_time.elapsed(),
-                        try_counter,
-                        iter_counter,
-                        score,
-                        to_string(&best.1[i]),
-                        to_string(&best.1[j])
-                    );
-                    (try_counter, iter_counter) = (0, 0);
-                    num_iter = min_iter;
-                    num_tries = max_iter / num_iter;
+        let initial_iter: u64 = 10000000;
+        let mut initial_score_metric =
+            ConstrainedDistance::new(best.1.clone(), &oklab_lut, &constraint_lut);
+        let mut initial_iter_counter = 0;
+        loop {
+            initial_iter_counter += 1;
+            let (i, j, score) = initial_score_metric.get_min_score();
+            if score > best.0 {
+                best = (score, initial_score_metric.get_colors());
+                if initial_iter_counter > initial_iter {
+                    // First improvement after initial number of iterations
+                    // We assume that this will be a good hill to climb, if even this garbage algorithm can improve with it.
+                    break;
                 }
-                let index = score_metric.update_color((i, j));
-                score_metric.update(index);
             }
+            let index = initial_score_metric.update_color((i, j));
+            initial_score_metric.update(index);
         }
-        num_iter *= step;
-        num_tries = max_iter / num_iter;
 
-        // for _it in (0..num_iter).progress_with(
-        //     ProgressBar::new(num_iter).with_style(ProgressStyle::with_template(
-        //         "{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}",
-        //     )
-        //     .unwrap(),
-        // )) {
-        //     let (i, j, score) = score_metric.get_min_score();
-        //     if score > best.0 {
-        //         best = (score, score_metric.get_colors());
-        //         println!(
-        //             "{: >10}\t{}\t{}\t{}",
-        //             _it,
-        //             score,
-        //             to_string(&best.1[i]),
-        //             to_string(&best.1[j])
-        //         );
-        //     }
+        while num_iter <= max_iter {
+            // println!(
+            //     "{:#?}:\t{} tries of {} iterations",
+            //     start_time.elapsed(),
+            //     num_tries,
+            //     num_iter
+            // );
+            let mut try_counter = 0;
+            while try_counter < num_tries {
+                try_counter += 1;
+                // Theoretically this is quite fast
+                let mut score_metric =
+                    ConstrainedDistance::new(best.1.clone(), &oklab_lut, &constraint_lut);
+                let mut iter_counter = 0;
+                while iter_counter < num_iter {
+                    iter_counter += 1;
+                    let (i, j, score) = score_metric.get_min_score();
+                    if score > best.0 {
+                        best = (score, score_metric.get_colors());
+                        // println!(
+                        //     "{:#?}\t{}\t{}\t{}\t{}\t{}",
+                        //     start_time.elapsed(),
+                        //     try_counter,
+                        //     iter_counter,
+                        //     score,
+                        //     to_string(&best.1[i]),
+                        //     to_string(&best.1[j])
+                        // );
+                        (try_counter, iter_counter) = (0, 0);
+                        num_iter = min_iter;
+                        num_tries = max_iter / num_iter;
+                    }
+                    let index = score_metric.update_color((i, j));
+                    score_metric.update(index);
+                }
+            }
+            num_iter *= step;
+            num_tries = max_iter / num_iter;
 
-        // }
+            // for _it in (0..num_iter).progress_with(
+            //     ProgressBar::new(num_iter).with_style(ProgressStyle::with_template(
+            //         "{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}",
+            //     )
+            //     .unwrap(),
+            // )) {
+            //     let (i, j, score) = score_metric.get_min_score();
+            //     if score > best.0 {
+            //         best = (score, score_metric.get_colors());
+            //         println!(
+            //             "{: >10}\t{}\t{}\t{}",
+            //             _it,
+            //             score,
+            //             to_string(&best.1[i]),
+            //             to_string(&best.1[j])
+            //         );
+            //     }
+
+            // }
+        }
+        println!(
+            "{}:\t{:#?}\t{}\t{:?}",
+            very_big_index,
+            start_time.elapsed(),
+            best.0,
+            best.1.iter().map(to_string).collect_vec()
+        );
     }
-    println!(
-        "{:#?}\t{}\t{:?}",
-        start_time.elapsed(),
-        best.0,
-        best.1.iter().map(to_string).collect_vec()
-    );
 
     // let oklab_best = best.1.iter().map(|c| From::from(*c)).collect_vec();
     // let best_scores = get_scores(&oklab_best, &HyAB);
