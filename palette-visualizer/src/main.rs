@@ -60,9 +60,33 @@ where
     Path::new().set("fill", color).set("d", data)
 }
 
+fn make_center_circle(radius: f64, color: String) -> Path {
+    let inner_radius = DELTA;
+    let outer_radius = radius - DELTA;
+
+    let p1 = get_position(inner_radius, 0.0, 0.0);
+    let p2 = get_position(inner_radius, PI, 0.0);
+    let p3 = get_position(outer_radius, 0.0, 0.0);
+    let p4 = get_position(outer_radius, PI, 0.0);
+
+    let data = Data::new()
+        .move_to(p1)
+        .elliptical_arc_to((inner_radius, inner_radius, 0, 0, 0, p2.0, p2.1))
+        .elliptical_arc_to((inner_radius, inner_radius, 0, 0, 0, p1.0, p1.1))
+        .line_to(p3)
+        .elliptical_arc_to((outer_radius, outer_radius, 0, 0, 1, p4.0, p4.1))
+        .elliptical_arc_to((outer_radius, outer_radius, 0, 0, 1, p3.0, p3.1))
+        .close();
+
+    Path::new().set("fill", color).set("d", data)
+}
+
 fn make_ring(radii: (f64, f64), start_angle: f64, colors: Vec<String>) -> Vec<Path> {
     let n = colors.len();
     if n == 1 {
+        if radii.0 == 0.0 {
+            return vec![make_center_circle(radii.1, colors[0].clone())];
+        }
         return make_ring(
             radii,
             start_angle,
