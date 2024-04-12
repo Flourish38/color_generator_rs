@@ -141,7 +141,7 @@ fn add_to_list(
     }
 }
 
-fn optimize_layers(n: usize) -> (Vec<usize>, f64) {
+fn optimize_layers(n: usize) -> Vec<usize> {
     let baseline_squareness = squareness_objective((0.0, RADIUS), n);
     let mut best_result = vec![n];
     let mut best_score = baseline_squareness;
@@ -155,52 +155,51 @@ fn optimize_layers(n: usize) -> (Vec<usize>, f64) {
             layers += 1;
         } else {
             //println!("{}\t{}:\t{:?}", layers + 1, score, list);
-            return (best_result, best_score);
+            return best_result;
         }
     }
 }
 
-fn make_rings(colors: Vec<String>) -> Vec<Vec<Path>> {
+fn make_rings(mut colors: Vec<String>) -> Vec<Vec<Path>> {
     let n = colors.len();
-    todo!()
+
+    let ring_sizes = optimize_layers(n);
+
+    println!("{:?}", ring_sizes);
+
+    let radii = calculate_radii(&ring_sizes);
+
+    let mut rings = Vec::with_capacity(n);
+
+    for i in 0..ring_sizes.len() {
+        let remaining_colors = colors.split_off(ring_sizes[i]);
+        rings.push(make_ring((radii[i], radii[i + 1]), 0.0, colors));
+        colors = remaining_colors;
+    }
+
+    rings
 }
 
 fn main() {
     // cargo run -p palette-visualizer -- #ff0000 #ffff00 #00ff00 #0000ff
     // cargo run -p palette-visualizer -- '#ff0000' '#ffff00' '#00ff00' '#0000ff'
-    // let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
-    // let colors: Vec<_> = env::args().filter(|s| regex.is_match(s)).collect();
+    let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
+    let mut colors: Vec<_> = env::args()
+        .map(|s| {
+            if s.starts_with("#") {
+                s
+            } else {
+                let mut out = "#".to_owned();
+                out.push_str(s.as_str());
+                out
+            }
+        })
+        .filter(|s| regex.is_match(s))
+        .collect();
 
-    // let document = make_document(make_rings(colors));
+    println!("{}", colors.len());
 
-    // svg::save("image.svg", &document).unwrap();
+    let document = make_document(make_rings(colors));
 
-    use std::time::Instant;
-    let start_time = Instant::now();
-
-    let mut prev_len = 0;
-    let mut prev_score = INFINITY;
-    let mut increasing = false;
-    for i in 1..171 {
-        let results = optimize_layers(i);
-        let len = results.0.len();
-        if len != prev_len {
-            println!("{}:\t{}\t{}\t{:?}", i, len, results.1, results.0);
-            prev_len = len;
-        }
-        if prev_score < results.1 && !increasing {
-            println!(
-                "{}:\t{}\t{}\t{:?}",
-                i - 1,
-                len,
-                prev_score,
-                optimize_layers(i - 1).0
-            );
-            increasing = true;
-        }
-        if prev_score > results.1 {
-            increasing = false;
-        }
-        prev_score = results.1;
-    }
+    svg::save("image.svg", &document).unwrap();
 }

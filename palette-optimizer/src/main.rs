@@ -16,7 +16,7 @@ fn breakpoint() {
 fn main() {
     // let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
     // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
-    let color_lut = SrgbLut::new(|c| simulate_tritan(c));
+    let color_lut = SrgbLut::new(|c| c.into());
     // let constraint_lut =
     //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
