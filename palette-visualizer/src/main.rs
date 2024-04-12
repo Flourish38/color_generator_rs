@@ -8,32 +8,53 @@ use svg::node::Value;
 use svg::Document;
 
 const RADIUS: f64 = 300.0;
-const DELTA: f64 = RADIUS * 0.02;
+const DELTA: f64 = RADIUS * 0.01;
 
-fn get_position(radius: f64, angle: f64) -> (f64, f64) {
+fn get_position(radius: f64, angle: f64, delta: f64) -> (f64, f64) {
     let (sin, cos) = angle.sin_cos();
-    (sin * radius, cos * radius)
+    (sin * radius - cos * delta, cos * radius + sin * delta)
 }
 
-fn make_slice<T: ?Sized>((r1, r2): (f64, f64), (angle_1, angle_2): (f64, f64), color: &T) -> Path
+fn make_slice<T: ?Sized>((r1, r2): (f64, f64), start_angle: f64, n: usize, color: &T) -> Path
 where
     Value: for<'a> From<&'a T>,
 {
+    // offset radii for spacing
     let inner_radius = r1.min(r2) + DELTA;
     let outer_radius = r1.max(r2) - DELTA;
-    let start_angle = angle_1.min(angle_2);
-    let end_angle = angle_1.max(angle_2);
+    let end_angle = start_angle + TAU / n as f64;
 
-    let c1 = get_position(inner_radius, start_angle);
-    let c2 = get_position(inner_radius, end_angle);
-    let c3 = get_position(outer_radius, end_angle);
-    let c4 = get_position(outer_radius, start_angle);
+    // didn't prove rigorously that these offsets work, but like. they do
+    let c1 = get_position(inner_radius, start_angle, -DELTA);
+    let c2 = get_position(inner_radius, end_angle, DELTA);
+    let c3 = get_position(outer_radius, end_angle, DELTA);
+    let c4 = get_position(outer_radius, start_angle, -DELTA);
+
+    // correction to make sure the arcs are still centered at the origin
+    let outer_radius_offset = (outer_radius * outer_radius + DELTA * DELTA).sqrt();
+    let inner_radius_offset = (inner_radius * inner_radius + DELTA * DELTA).sqrt();
 
     let data = Data::new()
         .move_to(c1)
-        .elliptical_arc_to((inner_radius, inner_radius, 0, 0, 0, c2.0, c2.1))
+        .elliptical_arc_to((
+            inner_radius_offset,
+            inner_radius_offset,
+            0,
+            0,
+            0,
+            c2.0,
+            c2.1,
+        ))
         .line_to(c3)
-        .elliptical_arc_to((outer_radius, outer_radius, 0, 0, 1, c4.0, c4.1))
+        .elliptical_arc_to((
+            outer_radius_offset,
+            outer_radius_offset,
+            0,
+            0,
+            1,
+            c4.0,
+            c4.1,
+        ))
         .close();
 
     Path::new().set("fill", color).set("d", data)
@@ -53,9 +74,8 @@ fn make_ring(radii: (f64, f64), start_angle: f64, colors: Vec<String>) -> Vec<Pa
         .iter()
         .enumerate()
         .map(|(i, color)| {
-            let angle_1 = start_angle + i as f64 * angle_offset;
-            let angle_2 = start_angle + (i + 1) as f64 * angle_offset;
-            make_slice(radii, (angle_1, angle_2), color)
+            let start_angle = start_angle + i as f64 * angle_offset;
+            make_slice(radii, start_angle, n, color)
         })
         .collect()
 }
@@ -185,7 +205,7 @@ fn main() {
     // cargo run -p palette-visualizer -- #ff0000 #ffff00 #00ff00 #0000ff
     // cargo run -p palette-visualizer -- '#ff0000' '#ffff00' '#00ff00' '#0000ff'
     let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
-    let mut colors: Vec<_> = env::args()
+    let colors: Vec<_> = env::args()
         .map(|s| {
             if s.starts_with("#") {
                 s
