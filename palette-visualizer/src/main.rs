@@ -1,9 +1,11 @@
+use regex::Regex;
+use std::env;
 use svg::node::element::path::Data;
 use svg::node::element::Path;
 use svg::node::Value;
 use svg::Document;
 
-const SIZE: f64 = 100.0;
+const RADIUS: f64 = 50.0;
 
 fn get_position(radius: f64, angle: f64) -> (f64, f64) {
     let (sin, cos) = angle.sin_cos();
@@ -34,13 +36,14 @@ where
     Path::new().set("fill", color).set("d", data)
 }
 
-fn make_ring<T: ?Sized>(radii: (f64, f64), start_angle: f64, colors: Vec<&T>) -> Vec<Path>
-where
-    Value: for<'a> From<&'a T>,
-{
+fn make_ring(radii: (f64, f64), start_angle: f64, colors: Vec<String>) -> Vec<Path> {
     let n = colors.len();
     if n == 1 {
-        return make_ring(radii, start_angle, vec![colors[0], colors[0]]);
+        return make_ring(
+            radii,
+            start_angle,
+            vec![colors[0].clone(), colors[0].clone()],
+        );
     }
     let angle_offset = std::f64::consts::TAU / n as f64;
     colors
@@ -60,14 +63,17 @@ fn make_document(rings: Vec<Vec<Path>>) -> Document {
         .fold(Document::new(), |doc, paths| {
             paths.into_iter().fold(doc, |doc, path| doc.add(path))
         })
-        .set("viewBox", (-SIZE / 2.0, -SIZE / 2.0, SIZE, SIZE))
+        .set("viewBox", (-RADIUS, -RADIUS, RADIUS * 2.0, RADIUS * 2.0))
 }
 
 fn main() {
-    let document = make_document(vec![
-        make_ring((15.0, 25.0), 25.0_f64.to_radians(), vec!["green", "red"]),
-        make_ring((0.0, 15.0), -15.0_f64.to_radians(), vec!["blue", "yellow"]),
-    ]);
+    // cargo run -p palette-visualizer -- #ff0000 #ffff00 #00ff00 #0000ff
+    // cargo run -p palette-visualizer -- '#ff0000' '#ffff00' '#00ff00' '#0000ff'
+    let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
+    let colors: Vec<_> = env::args().filter(|s| regex.is_match(s)).collect();
+    println!("{}", colors.len());
+
+    let document = make_document(vec![make_ring((15.0, 25.0), 25.0_f64.to_radians(), colors)]);
 
     svg::save("image.svg", &document).unwrap();
 }
