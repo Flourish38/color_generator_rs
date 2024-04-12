@@ -66,14 +66,45 @@ fn make_document(rings: Vec<Vec<Path>>) -> Document {
         .set("viewBox", (-RADIUS, -RADIUS, RADIUS * 2.0, RADIUS * 2.0))
 }
 
+fn calculate_radius_frac(inner_ring: usize, outer_ring: usize, inside_frac: f64) -> f64 {
+    // derivation: https://www.wolframalpha.com/input?i2d=true&i=Integrate%5Br%2C%7Br%2Cf%2CSubscript%5Br%2C2%5D%7D%2C%7Bt%2C0%2CDivide%5B2%CF%80%2Cm%5D%7D%5D%3DIntegrate%5Br%2C%7Br%2C0%2C1%7D%2C%7Bt%2C0%2CDivide%5B2%CF%80%2Cn%5D%7D%5D
+    // exploration: https://www.desmos.com/calculator/esepiyoguk
+    let partial = inside_frac * inside_frac * inner_ring as f64;
+    (partial + outer_ring as f64).sqrt() / partial.sqrt()
+}
+
+fn calculate_radii(per_ring: Vec<usize>) -> Vec<f64> {
+    let mut acc = 1.0;
+    let mut rad_fracs = Vec::new();
+    for i in 1..per_ring.len() {
+        let f = calculate_radius_frac(per_ring[0], per_ring[i], acc);
+        rad_fracs.push(f);
+        acc *= f;
+    }
+    let mut total = RADIUS;
+    let mut outputs = vec![total];
+    for frac in rad_fracs.iter().rev() {
+        total /= frac;
+        outputs.push(total);
+    }
+    outputs.reverse();
+    outputs
+}
+
+fn make_rings(colors: Vec<String>) -> Vec<Vec<Path>> {
+    let n = colors.len();
+    todo!()
+}
+
 fn main() {
     // cargo run -p palette-visualizer -- #ff0000 #ffff00 #00ff00 #0000ff
     // cargo run -p palette-visualizer -- '#ff0000' '#ffff00' '#00ff00' '#0000ff'
-    let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
-    let colors: Vec<_> = env::args().filter(|s| regex.is_match(s)).collect();
-    println!("{}", colors.len());
+    // let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
+    // let colors: Vec<_> = env::args().filter(|s| regex.is_match(s)).collect();
 
-    let document = make_document(vec![make_ring((15.0, 25.0), 25.0_f64.to_radians(), colors)]);
+    // let document = make_document(make_rings(colors));
 
-    svg::save("image.svg", &document).unwrap();
+    // svg::save("image.svg", &document).unwrap();
+
+    println!("{:?}", calculate_radii(vec![3, 9, 15]))
 }
