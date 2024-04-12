@@ -7,7 +7,8 @@ use svg::node::element::Path;
 use svg::node::Value;
 use svg::Document;
 
-const RADIUS: f64 = 50.0;
+const RADIUS: f64 = 300.0;
+const DELTA: f64 = RADIUS * 0.02;
 
 fn get_position(radius: f64, angle: f64) -> (f64, f64) {
     let (sin, cos) = angle.sin_cos();
@@ -18,8 +19,8 @@ fn make_slice<T: ?Sized>((r1, r2): (f64, f64), (angle_1, angle_2): (f64, f64), c
 where
     Value: for<'a> From<&'a T>,
 {
-    let inner_radius = r1.min(r2);
-    let outer_radius = r1.max(r2);
+    let inner_radius = r1.min(r2) + DELTA;
+    let outer_radius = r1.max(r2) - DELTA;
     let start_angle = angle_1.min(angle_2);
     let end_angle = angle_1.max(angle_2);
 
