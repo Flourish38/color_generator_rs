@@ -1,4 +1,3 @@
-use core::num;
 use regex::Regex;
 use std::env;
 use std::f64::consts::{PI, TAU};
@@ -17,7 +16,7 @@ fn get_position(radius: f64, angle: f64, delta: f64) -> (f64, f64) {
 }
 
 fn make_slice<T: ?Sized>(
-    (r1, r2): (f64, f64),
+    (r_inner, r_outer): (f64, f64),
     start_angle: f64,
     n: usize,
     delta: f64,
@@ -27,8 +26,14 @@ where
     Value: for<'a> From<&'a T>,
 {
     // offset radii for spacing
-    let inner_radius = r1.min(r2) + delta;
-    let outer_radius = r1.max(r2) - delta;
+    let inner_radius = if r_inner == 0.0 {
+        // This correction ensures that the innermost ring comes to sharp points on the inside.
+        let tan = (PI / 2.0 - PI / n as f64).tan();
+        r_inner + tan * delta
+    } else {
+        r_inner + delta
+    };
+    let outer_radius = r_outer - delta;
     let end_angle = start_angle + TAU / n as f64;
 
     // didn't prove rigorously that these offsets work, but like. they do
