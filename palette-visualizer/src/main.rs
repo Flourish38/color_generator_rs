@@ -8,31 +8,37 @@ use svg::node::Value;
 use svg::Document;
 
 const RADIUS: f64 = 300.0;
-const DELTA: f64 = RADIUS * 0.01;
+const DELTA: f64 = RADIUS * 0.02;
 
 fn get_position(radius: f64, angle: f64, delta: f64) -> (f64, f64) {
     let (sin, cos) = angle.sin_cos();
     (sin * radius - cos * delta, cos * radius + sin * delta)
 }
 
-fn make_slice<T: ?Sized>((r1, r2): (f64, f64), start_angle: f64, n: usize, color: &T) -> Path
+fn make_slice<T: ?Sized>(
+    (r1, r2): (f64, f64),
+    start_angle: f64,
+    n: usize,
+    delta: f64,
+    color: &T,
+) -> Path
 where
     Value: for<'a> From<&'a T>,
 {
     // offset radii for spacing
-    let inner_radius = r1.min(r2) + DELTA;
-    let outer_radius = r1.max(r2) - DELTA;
+    let inner_radius = r1.min(r2) + delta;
+    let outer_radius = r1.max(r2) - delta;
     let end_angle = start_angle + TAU / n as f64;
 
     // didn't prove rigorously that these offsets work, but like. they do
-    let c1 = get_position(inner_radius, start_angle, -DELTA);
-    let c2 = get_position(inner_radius, end_angle, DELTA);
-    let c3 = get_position(outer_radius, end_angle, DELTA);
-    let c4 = get_position(outer_radius, start_angle, -DELTA);
+    let c1 = get_position(inner_radius, start_angle, -delta);
+    let c2 = get_position(inner_radius, end_angle, delta);
+    let c3 = get_position(outer_radius, end_angle, delta);
+    let c4 = get_position(outer_radius, start_angle, -delta);
 
     // correction to make sure the arcs are still centered at the origin
-    let outer_radius_offset = (outer_radius * outer_radius + DELTA * DELTA).sqrt();
-    let inner_radius_offset = (inner_radius * inner_radius + DELTA * DELTA).sqrt();
+    let outer_radius_offset = (outer_radius * outer_radius + delta * delta).sqrt();
+    let inner_radius_offset = (inner_radius * inner_radius + delta * delta).sqrt();
 
     let data = Data::new()
         .move_to(c1)
@@ -60,9 +66,9 @@ where
     Path::new().set("fill", color).set("d", data)
 }
 
-fn make_center_circle(radius: f64, color: String) -> Path {
-    let inner_radius = DELTA;
-    let outer_radius = radius - DELTA;
+fn make_center_circle(radius: f64, delta: f64, color: String) -> Path {
+    let inner_radius = 0.0;
+    let outer_radius = radius - delta;
 
     let p1 = get_position(inner_radius, 0.0, 0.0);
     let p2 = get_position(inner_radius, PI, 0.0);
@@ -81,15 +87,16 @@ fn make_center_circle(radius: f64, color: String) -> Path {
     Path::new().set("fill", color).set("d", data)
 }
 
-fn make_ring(radii: (f64, f64), start_angle: f64, colors: Vec<String>) -> Vec<Path> {
+fn make_ring(radii: (f64, f64), start_angle: f64, delta: f64, colors: Vec<String>) -> Vec<Path> {
     let n = colors.len();
     if n == 1 {
         if radii.0 == 0.0 {
-            return vec![make_center_circle(radii.1, colors[0].clone())];
+            return vec![make_center_circle(radii.1, delta, colors[0].clone())];
         }
         return make_ring(
             radii,
             start_angle,
+            delta,
             vec![colors[0].clone(), colors[0].clone()],
         );
     }
@@ -99,7 +106,7 @@ fn make_ring(radii: (f64, f64), start_angle: f64, colors: Vec<String>) -> Vec<Pa
         .enumerate()
         .map(|(i, color)| {
             let start_angle = start_angle + i as f64 * angle_offset;
-            make_slice(radii, start_angle, n, color)
+            make_slice(radii, start_angle, n, delta, color)
         })
         .collect()
 }
@@ -210,15 +217,22 @@ fn make_rings(mut colors: Vec<String>) -> Vec<Vec<Path>> {
 
     let ring_sizes = optimize_layers(n);
 
+    let num_rings = ring_sizes.len();
+
     println!("{:?}", ring_sizes);
 
     let radii = calculate_radii(&ring_sizes);
 
-    let mut rings = Vec::with_capacity(n);
+    let mut rings = Vec::with_capacity(num_rings);
 
     for i in 0..ring_sizes.len() {
         let remaining_colors = colors.split_off(ring_sizes[i]);
-        rings.push(make_ring((radii[i], radii[i + 1]), 0.0, colors));
+        rings.push(make_ring(
+            (radii[i], radii[i + 1]),
+            0.0,
+            DELTA / ((num_rings + 1) as f64).log2(),
+            colors,
+        ));
         colors = remaining_colors;
     }
 
