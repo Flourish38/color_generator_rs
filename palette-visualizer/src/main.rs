@@ -105,8 +105,8 @@ fn make_ring(radii: (f64, f64), start_angle: f64, delta: f64, colors: Vec<String
         .iter()
         .enumerate()
         .map(|(i, color)| {
-            let start_angle = start_angle + i as f64 * angle_offset;
-            make_slice(radii, start_angle, n, delta, color)
+            let inner_start_angle = start_angle + i as f64 * angle_offset;
+            make_slice(radii, inner_start_angle, n, delta, color)
         })
         .collect()
 }
@@ -135,6 +135,7 @@ fn calculate_radii(per_ring: &Vec<usize>) -> Vec<f64> {
         rad_fracs.push(f);
         acc *= f;
     }
+    // convert the unitless radii fractions into actual radii with units
     let mut total = RADIUS;
     let mut outputs = vec![total];
     for frac in rad_fracs.iter().rev() {
@@ -199,17 +200,33 @@ fn optimize_layers(n: usize) -> Vec<usize> {
     let mut best_score = baseline_squareness;
     let mut layers = 1;
     loop {
-        //println!("{}\t{}:\t{:?}", layers, best_score, best_result);
         let (list, score) = add_to_list(&vec![], n, layers);
         if score < best_score {
             best_result = list;
             best_score = score;
             layers += 1;
         } else {
-            //println!("{}\t{}:\t{:?}", layers + 1, score, list);
             return best_result;
         }
     }
+}
+
+fn angle_offset(n: usize, m: usize) -> f64 {
+    // didn't prove this to be right but it passed a rigorous eye test on desmos:
+    // https://www.desmos.com/calculator/5l3rsa2ros
+    PI / (num_integer::lcm(n, m)) as f64
+}
+
+fn calculate_angles(rings: &Vec<usize>) -> Vec<f64> {
+    let outer_angle = angle_offset(*rings.last().unwrap(), 4);
+    let mut output = vec![outer_angle];
+    let mut prev_angle = outer_angle;
+    for i in (1..=(rings.len() - 1)).rev() {
+        prev_angle += angle_offset(rings[i], rings[i - 1]);
+        output.push(prev_angle);
+    }
+    output.reverse();
+    output
 }
 
 fn make_rings(mut colors: Vec<String>) -> Vec<Vec<Path>> {
@@ -223,13 +240,16 @@ fn make_rings(mut colors: Vec<String>) -> Vec<Vec<Path>> {
 
     let radii = calculate_radii(&ring_sizes);
 
+    let angles = calculate_angles(&ring_sizes);
+
     let mut rings = Vec::with_capacity(num_rings);
 
     for i in 0..ring_sizes.len() {
         let remaining_colors = colors.split_off(ring_sizes[i]);
         rings.push(make_ring(
             (radii[i], radii[i + 1]),
-            0.0,
+            angles[i],
+            // lines between patches get thinner with more rings
             DELTA / ((num_rings + 1) as f64).log2(),
             colors,
         ));
