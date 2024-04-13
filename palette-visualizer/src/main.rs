@@ -1,3 +1,4 @@
+use core::num;
 use regex::Regex;
 use std::env;
 use std::f64::consts::{PI, TAU};
@@ -212,9 +213,18 @@ fn optimize_layers(n: usize) -> Vec<usize> {
 }
 
 fn angle_offset(n: usize, m: usize) -> f64 {
-    // didn't prove this to be right but it passed a rigorous eye test on desmos:
-    // https://www.desmos.com/calculator/5l3rsa2ros
-    PI / (num_integer::lcm(n, m)) as f64
+    // This is utter nonsense,
+    // but it does a pretty good job of scrambling the lines.
+    if n == m {
+        // edge case. :/
+        return PI / n as f64;
+    }
+    let (gcd, lcm) = num_integer::gcd_lcm(n, m);
+    if n % 2 == 0 || m % 2 == 0 {
+        (PI / lcm as f64) + (PI / gcd as f64) + (TAU / n.max(m) as f64)
+    } else {
+        (TAU / lcm as f64) + (PI / gcd as f64) + (TAU / n.min(m) as f64)
+    }
 }
 
 fn calculate_angles(rings: &Vec<usize>) -> Vec<f64> {
