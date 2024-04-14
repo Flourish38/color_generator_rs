@@ -25,7 +25,7 @@ fn main() {
     let update_freq: u64 = 1000000;
     // breakpoint();
     for big_num in 0..1 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(1000).collect_vec();
         let mut score_metric = PairDistance::new(&colors, &color_lut);
         let mut best = (-INFINITY, Vec::new());
 

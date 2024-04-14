@@ -184,10 +184,26 @@ fn add_to_list(
         let sq = mean_squareness(&inner_list);
         (inner_list, sq)
     } else {
-        let biggest_size = *list.last().unwrap_or(&0);
+        let (lower_bound, upper_bound) = if list.len() == 0 {
+            // This is guaranteed to be true,
+            // since [1, 5] has a better score than [6]
+            // despite taking the same area
+            (1, 5)
+        } else {
+            // These bounds are based on observation. I have never seen it choose values outside of this range.
+            let biggest_layer = list.last().unwrap();
+            if list.len() == 1 {
+                (biggest_layer + 4, biggest_layer + 8)
+            } else {
+                (biggest_layer + 6, biggest_layer + 7)
+            }
+        };
         let mut best_list = vec![];
         let mut best_score = INFINITY;
-        for i in biggest_size..((n_remaining + layers_remaining) / (layers_remaining + 1)) {
+        // This loop can run zero times, and that is intentional.
+        for i in
+            lower_bound..=upper_bound.min((n_remaining + layers_remaining) / (layers_remaining + 1))
+        {
             let mut inner_list = list.clone();
             inner_list.push(i);
             let (new_list, score) = add_to_list(&inner_list, n_remaining - i, layers_remaining - 1);
@@ -204,7 +220,17 @@ fn optimize_layers(n: usize) -> Vec<usize> {
     let baseline_squareness = squareness_objective((0.0, RADIUS), n);
     let mut best_result = vec![n];
     let mut best_score = baseline_squareness;
-    let mut layers = 1;
+    let mut layers = {
+        let mut inc = 5;
+        let mut total = inc;
+        let mut count = 0;
+        while total < n {
+            count += 1;
+            inc += 7;
+            total += inc;
+        }
+        count
+    };
     loop {
         let (list, score) = add_to_list(&vec![], n, layers);
         if score < best_score {
@@ -293,7 +319,13 @@ fn main() {
 
     println!("{}", colors.len());
 
-    let document = make_document(make_rings(colors));
+    let start_time = std::time::Instant::now();
+
+    let rings = make_rings(colors);
+
+    println!("{:#?}", start_time.elapsed());
+
+    let document = make_document(rings);
 
     svg::save("image.svg", &document).unwrap();
 }
