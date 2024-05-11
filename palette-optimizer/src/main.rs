@@ -1,10 +1,12 @@
 extern crate lib;
+extern crate palette_visualizer;
 
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use lib::color::*;
 use lib::metric::*;
 use lib::update::*;
+use palette_visualizer::save_svg;
 use std::{f32::INFINITY, iter::repeat_with, time::Instant};
 
 #[allow(dead_code)]
@@ -24,8 +26,8 @@ fn main() {
     let num_iter: u64 = 1000000000;
     let update_freq: u64 = 1000000;
     // breakpoint();
-    for big_num in 0..1 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(1000).collect_vec();
+    for big_num in 0..2 {
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
         let mut score_metric = PairDistance::new(&colors, &color_lut);
         let mut best = (-INFINITY, Vec::new());
 
@@ -66,6 +68,12 @@ fn main() {
         );
         // 's/[\[" #]//g'
         // https://www.atatus.com/tools/color-code-viewer#
+
+        save_svg(
+            format!("img_{:02}.svg", big_num),
+            best.1.iter().map(to_string).collect_vec(),
+        )
+        .unwrap();
     }
 
     // breakpoint();

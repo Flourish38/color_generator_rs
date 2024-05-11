@@ -171,6 +171,7 @@ dependencies = [
  "indicatif",
  "itertools",
  "lib",
+ "palette-visualizer",
  "rand",
 ]
 
