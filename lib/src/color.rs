@@ -221,6 +221,29 @@ pub fn simulate_tritan(c: sRGB) -> Oklab {
     Into::<LMS>::into(c).simulate_tritan().into()
 }
 
+#[allow(non_snake_case)]
+pub struct Oklch {
+    L: f32,
+    C: f32,
+    h: f32,
+}
+
+impl From<Oklab> for Oklch {
+    fn from(c: Oklab) -> Self {
+        Self {
+            L: c.L,
+            C: (c.a.powi(2) + c.b.powi(2)).sqrt(),
+            h: c.b.atan2(c.a),
+        }
+    }
+}
+
+impl From<sRGB> for Oklch {
+    fn from(c: sRGB) -> Self {
+        Into::<Oklab>::into(c).into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
