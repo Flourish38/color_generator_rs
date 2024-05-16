@@ -1,27 +1,36 @@
 mod code;
 
 use code::make_document;
+use lib::color::sRGB;
 use regex::Regex;
 use std::env;
 
 const RADIUS: f64 = 300.0;
 const DELTA: f64 = RADIUS * 0.02;
 
+#[allow(non_snake_case)]
+fn parse_to_sRGB(c: String) -> Option<sRGB> {
+    let regex = Regex::new(r"^[0-9a-fA-F]{6}$").unwrap();
+    let s = if c.starts_with('#') { &c[1..] } else { &c };
+    if !regex.is_match(s) {
+        None
+    } else {
+        Some([
+            u8::from_str_radix(&s[0..2], 16).unwrap(),
+            u8::from_str_radix(&s[2..4], 16).unwrap(),
+            u8::from_str_radix(&s[4..6], 16).unwrap(),
+        ])
+    }
+}
+
 fn main() {
     // cargo run -p palette-visualizer -- #ff0000 #ffff00 #00ff00 #0000ff
     // cargo run -p palette-visualizer -- '#ff0000' '#ffff00' '#00ff00' '#0000ff'
-    let regex = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
+
     let colors: Vec<_> = env::args()
-        .map(|s| {
-            if s.starts_with("#") {
-                s
-            } else {
-                let mut out = "#".to_owned();
-                out.push_str(s.as_str());
-                out
-            }
-        })
-        .filter(|s| regex.is_match(s))
+        .map(parse_to_sRGB)
+        .filter(Option::is_some)
+        .map(Option::unwrap)
         .collect();
 
     println!("{}", colors.len());

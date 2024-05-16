@@ -281,7 +281,7 @@ fn sort_colors(mut colors: Vec<sRGB>, rings: &Vec<usize>) -> Vec<Vec<String>> {
     result
 }
 
-fn make_rings(mut colors: Vec<String>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
+fn make_rings(colors: Vec<sRGB>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
     let n = colors.len();
 
     let ring_sizes = optimize_layers(n);
@@ -294,24 +294,24 @@ fn make_rings(mut colors: Vec<String>, radius: f64, delta: f64) -> Vec<Vec<Path>
 
     let angles = calculate_angles(&ring_sizes);
 
+    let sorted_colors = sort_colors(colors, &ring_sizes);
+
     let mut rings = Vec::with_capacity(num_rings);
 
     for i in 0..ring_sizes.len() {
-        let remaining_colors = colors.split_off(ring_sizes[i]);
         rings.push(make_ring(
             (radii[i], radii[i + 1]),
             angles[i],
             // lines between patches get thinner with more rings
             delta / ((num_rings + 1) as f64).log2(),
-            colors,
+            sorted_colors[i].clone(),
         ));
-        colors = remaining_colors;
     }
 
     rings
 }
 
-pub fn make_document(colors: Vec<String>, radius: f64, delta: f64) -> Document {
+pub fn make_document(colors: Vec<sRGB>, radius: f64, delta: f64) -> Document {
     let rings = make_rings(colors, radius, delta);
 
     rings
