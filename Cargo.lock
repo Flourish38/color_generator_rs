@@ -179,6 +179,7 @@ dependencies = [
 name = "palette-visualizer"
 version = "0.1.0"
 dependencies = [
+ "lib",
  "num-integer",
  "regex",
  "svg",

@@ -223,9 +223,9 @@ pub fn simulate_tritan(c: sRGB) -> Oklab {
 
 #[allow(non_snake_case)]
 pub struct Oklch {
-    L: f32,
-    C: f32,
-    h: f32,
+    pub L: f32,
+    pub C: f32,
+    pub h: f32,
 }
 
 impl From<Oklab> for Oklch {

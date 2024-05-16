@@ -1,3 +1,6 @@
+extern crate lib;
+
+use lib::color::{sRGB, to_string, Oklch};
 use std::f64::consts::{PI, TAU};
 use std::f64::INFINITY;
 use svg::node::element::path::Data;
@@ -254,6 +257,28 @@ fn calculate_angles(rings: &Vec<usize>) -> Vec<f64> {
     }
     output.reverse();
     output
+}
+
+fn sort_colors(mut colors: Vec<sRGB>, rings: &Vec<usize>) -> Vec<Vec<String>> {
+    colors.sort_by(|c1, c2| {
+        <sRGB as Into<Oklch>>::into(*c1)
+            .C
+            .partial_cmp(&<sRGB as Into<Oklch>>::into(*c2).C)
+            .unwrap()
+    });
+    let mut result = Vec::with_capacity(rings.len());
+    for i in 0..rings.len() {
+        let remaining_colors = colors.split_off(rings[i]);
+        colors.sort_by(|c1, c2| {
+            <sRGB as Into<Oklch>>::into(*c1)
+                .h
+                .partial_cmp(&<sRGB as Into<Oklch>>::into(*c2).h)
+                .unwrap()
+        });
+        result.push(colors.into_iter().map(|c: [u8; 3]| to_string(&c)).collect());
+        colors = remaining_colors;
+    }
+    result
 }
 
 fn make_rings(mut colors: Vec<String>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
