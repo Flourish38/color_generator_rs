@@ -248,11 +248,13 @@ fn angle_offset(n: usize, m: usize) -> f64 {
 }
 
 fn calculate_angles(rings: &Vec<usize>) -> Vec<f64> {
-    let outer_angle = angle_offset(*rings.last().unwrap(), 4);
+    let outer_ring = *rings.last().unwrap();
+    let outer_angle = angle_offset(outer_ring, 4) % (TAU / outer_ring as f64);
     let mut output = vec![outer_angle];
     let mut prev_angle = outer_angle;
     for i in (1..=(rings.len() - 1)).rev() {
         prev_angle += angle_offset(rings[i], rings[i - 1]);
+        prev_angle %= TAU / rings[i - 1] as f64;
         output.push(prev_angle);
     }
     output.reverse();

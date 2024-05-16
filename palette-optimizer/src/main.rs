@@ -23,11 +23,11 @@ fn main() {
     //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
 
-    let num_iter: u64 = 100000000;
+    let num_iter: u64 = 1000000000;
     let update_freq: u64 = 1000000;
     // breakpoint();
-    for big_num in 0..2 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(50).collect_vec();
+    for big_num in 0..1 {
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(200).collect_vec();
         let mut score_metric = PairDistance::new(&colors, &color_lut);
         let mut best = (-INFINITY, Vec::new());
 
