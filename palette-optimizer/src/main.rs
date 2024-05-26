@@ -18,7 +18,7 @@ fn breakpoint() {
 fn main() {
     // let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
     // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
-    let color_lut = SrgbLut::new(|c| c.into());
+    let color_lut = SrgbLut::new(simulate_deutan);
     // let constraint_lut =
     //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
@@ -37,9 +37,6 @@ fn main() {
         ).unwrap());
 
         for _it in 0..num_iter {
-            if _it % update_freq == 0 {
-                pb.inc(update_freq)
-            }
             let (score, ind) = score_metric.get_min_score();
             if score > best.0 {
                 best = (score, colors.clone());
@@ -57,6 +54,9 @@ fn main() {
             }
             colors[index] = new_color;
             score_metric.update(index, &colors[index]);
+            if _it % update_freq == update_freq - 1 {
+                pb.inc(update_freq)
+            }
         }
         pb.finish_and_clear();
         println!(

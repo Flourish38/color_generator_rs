@@ -1,6 +1,6 @@
 extern crate lib;
 
-use lib::color::{sRGB, to_string, Oklch};
+use lib::color::{sRGB, to_string, HyAB, Oklab, Oklch};
 use std::f64::consts::{PI, TAU};
 use std::f64::INFINITY;
 use svg::node::element::path::Data;
@@ -261,22 +261,20 @@ fn calculate_angles(rings: &Vec<usize>) -> Vec<f64> {
     output
 }
 
+fn get_c(x: &sRGB) -> f32 {
+    <sRGB as Into<Oklch>>::into(*x).C
+}
+
+fn get_h(x: &sRGB) -> f32 {
+    <sRGB as Into<Oklch>>::into(*x).h
+}
+
 fn sort_colors(mut colors: Vec<sRGB>, rings: &Vec<usize>) -> Vec<Vec<String>> {
-    colors.sort_by(|c1, c2| {
-        <sRGB as Into<Oklch>>::into(*c1)
-            .C
-            .partial_cmp(&<sRGB as Into<Oklch>>::into(*c2).C)
-            .unwrap()
-    });
+    colors.sort_by(|c1, c2| get_c(c1).partial_cmp(&get_c(c2)).unwrap());
     let mut result = Vec::with_capacity(rings.len());
     for i in 0..rings.len() {
         let remaining_colors = colors.split_off(rings[i]);
-        colors.sort_by(|c1, c2| {
-            <sRGB as Into<Oklch>>::into(*c1)
-                .h
-                .partial_cmp(&<sRGB as Into<Oklch>>::into(*c2).h)
-                .unwrap()
-        });
+        colors.sort_by(|c1, c2| get_h(c1).partial_cmp(&get_h(c2)).unwrap());
         result.push(colors.into_iter().map(|c: [u8; 3]| to_string(&c)).collect());
         colors = remaining_colors;
     }
