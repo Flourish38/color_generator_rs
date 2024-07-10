@@ -33,12 +33,12 @@ enum Sign {
 
 fn color_update(mut c: sRGB, cu: &ColorUpdate) -> sRGB {
     let axis = cu.axis as usize;
-    let num = if c[axis] == 0x00 || cu.sign == Sign::Positive {
-        0x01
+    let num = if (cu.sign == Sign::Positive && c[axis] != 0xFF) || c[axis] == 0x00 {
+        1
     } else {
-        0xFF
+        -1
     };
-    c[axis] += num;
+    c[axis] = u8::wrapping_add_signed(c[axis], num);
     c
 }
 
