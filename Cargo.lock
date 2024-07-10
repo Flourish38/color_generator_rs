@@ -171,6 +171,7 @@ dependencies = [
  "color-lib",
  "indicatif",
  "itertools",
+ "once_cell",
  "palette-visualizer",
  "rand",
 ]

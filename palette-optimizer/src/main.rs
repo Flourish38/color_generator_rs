@@ -1,13 +1,17 @@
 extern crate color_lib;
 extern crate palette_visualizer;
 
+mod metric;
+mod score;
+mod update;
+
 use color_lib::color::*;
-use color_lib::metric::*;
-use color_lib::update::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use metric::*;
 use palette_visualizer::save_svg;
 use std::{f32::INFINITY, iter::repeat_with, time::Instant};
+use update::*;
 
 #[allow(dead_code)]
 fn breakpoint() {

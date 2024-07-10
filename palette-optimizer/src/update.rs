@@ -2,7 +2,7 @@ use itertools::{iproduct, Itertools};
 use once_cell::sync::Lazy;
 use rand::{distributions, distributions::Distribution, thread_rng};
 
-use crate::color::sRGB;
+use color_lib::color::sRGB;
 
 struct ColorPairUpdate {
     which: Which,
