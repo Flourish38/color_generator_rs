@@ -39,8 +39,6 @@ dependencies = [
  "approx",
  "fast-srgb8",
  "itertools",
- "once_cell",
- "rand",
 ]
 
 [[package]]
