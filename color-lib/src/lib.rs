@@ -69,7 +69,7 @@ impl From<RGB> for Oklab {
 
 impl From<sRGB> for Oklab {
     fn from(c: sRGB) -> Self {
-        Into::<RGB>::into(c).into()
+        RGB::from(c).into()
     }
 }
 
@@ -146,7 +146,7 @@ impl From<RGB> for LMS {
 
 impl From<sRGB> for LMS {
     fn from(c: sRGB) -> Self {
-        Into::<RGB>::into(c).into()
+        RGB::from(c).into()
     }
 }
 
@@ -163,7 +163,7 @@ impl From<LMS> for RGB {
 
 impl From<LMS> for Oklab {
     fn from(c: LMS) -> Self {
-        Into::<RGB>::into(c).into()
+        RGB::from(c).into()
     }
 }
 
@@ -212,13 +212,13 @@ impl LMS {
 }
 
 pub fn simulate_protan(c: sRGB) -> Oklab {
-    Into::<LMS>::into(c).simulate_protan().into()
+    LMS::from(c).simulate_protan().into()
 }
 pub fn simulate_deutan(c: sRGB) -> Oklab {
-    Into::<LMS>::into(c).simulate_deutan().into()
+    LMS::from(c).simulate_deutan().into()
 }
 pub fn simulate_tritan(c: sRGB) -> Oklab {
-    Into::<LMS>::into(c).simulate_tritan().into()
+    LMS::from(c).simulate_tritan().into()
 }
 
 #[allow(non_snake_case)]
@@ -240,7 +240,7 @@ impl From<Oklab> for Oklch {
 
 impl From<sRGB> for Oklch {
     fn from(c: sRGB) -> Self {
-        Into::<Oklab>::into(c).into()
+        Oklab::from(c).into()
     }
 }
 
