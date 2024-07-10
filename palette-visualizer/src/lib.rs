@@ -1,7 +1,7 @@
 mod code;
 
 pub use code::make_document;
-use color_lib::color::sRGB;
+use color_lib::sRGB;
 
 const RADIUS: f64 = 300.0;
 const DELTA: f64 = RADIUS * 0.02;

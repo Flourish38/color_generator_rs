@@ -5,7 +5,7 @@ mod metric;
 mod score;
 mod update;
 
-use color_lib::color::*;
+use color_lib::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use metric::*;

@@ -1,7 +1,7 @@
 use crate::score::*;
 use itertools::Itertools;
 
-use color_lib::color::{as_index, sRGB, HyAB, Oklab};
+use color_lib::{as_index, sRGB, HyAB, Oklab};
 use itertools::iproduct;
 
 pub struct SrgbLut<T> {

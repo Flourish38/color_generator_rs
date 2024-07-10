@@ -1,7 +1,7 @@
 mod code;
 
 use code::make_document;
-use color_lib::color::sRGB;
+use color_lib::sRGB;
 use regex::Regex;
 use std::env;
 

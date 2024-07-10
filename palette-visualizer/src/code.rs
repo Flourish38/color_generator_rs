@@ -1,6 +1,6 @@
 extern crate color_lib;
 
-use color_lib::color::{sRGB, to_string, Oklch};
+use color_lib::{sRGB, to_string, Oklch};
 use std::f64::consts::{PI, TAU};
 use std::f64::INFINITY;
 use svg::node::element::path::Data;

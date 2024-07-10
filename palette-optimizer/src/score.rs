@@ -1,6 +1,6 @@
 use std::{f32::INFINITY, fmt::Debug};
 
-use color_lib::color::{HyAB, Oklab};
+use color_lib::{HyAB, Oklab};
 
 fn parent(i: usize) -> usize {
     (i - 1) / 2
