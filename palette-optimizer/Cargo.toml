@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 indicatif = "0.17.8"
 itertools = "0.12.1"
-lib = { path = "../lib" }
+color-lib = { path = "../color-lib" }
 palette-visualizer = { path = "../palette-visualizer" }
 rand = "0.8.5"

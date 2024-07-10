@@ -1,11 +1,11 @@
-extern crate lib;
+extern crate color_lib;
 extern crate palette_visualizer;
 
+use color_lib::color::*;
+use color_lib::metric::*;
+use color_lib::update::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use lib::color::*;
-use lib::metric::*;
-use lib::update::*;
 use palette_visualizer::save_svg;
 use std::{f32::INFINITY, iter::repeat_with, time::Instant};
 
@@ -18,16 +18,16 @@ fn breakpoint() {
 fn main() {
     // let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
     // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
-    let color_lut = SrgbLut::new(simulate_deutan);
+    let color_lut = SrgbLut::new(Oklab::from);
     // let constraint_lut =
     //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
 
-    let num_iter: u64 = 1000000000;
+    let num_iter: u64 = 100000000;
     let update_freq: u64 = 1000000;
     // breakpoint();
     for big_num in 0..1 {
-        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(200).collect_vec();
+        let mut colors: Vec<sRGB> = repeat_with(rand::random).take(20).collect_vec();
         let mut score_metric = PairDistance::new(&colors, &color_lut);
         let mut best = (-INFINITY, Vec::new());
 
