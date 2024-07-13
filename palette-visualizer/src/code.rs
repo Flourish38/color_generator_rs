@@ -288,8 +288,6 @@ fn make_rings(colors: Vec<sRGB>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
 
     let num_rings = ring_sizes.len();
 
-    println!("{:?}", ring_sizes);
-
     let radii = calculate_radii(&ring_sizes, radius);
 
     let angles = calculate_angles(&ring_sizes);
