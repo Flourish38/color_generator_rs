@@ -89,6 +89,33 @@ impl<'a> Optimizer<'a> {
         }
     }
 
+    pub fn restore_best(&mut self) {
+        self.colors = self.best_colors.1.clone();
+        let mut min_score = (f32::INFINITY, Metric::Const(0, 0));
+        for (i, (w, pair_metric)) in self.pair_metrics.iter_mut().enumerate() {
+            for index in 0..self.colors.len() {
+                pair_metric.update(index, &self.colors[index]);
+            }
+            let (s, pair_index) = pair_metric.get_min_score();
+            let score = s / *w;
+            if score < min_score.0 {
+                min_score = (score, Metric::Pair(i, pair_index));
+            }
+        }
+        for (i, (w, constraint)) in self.constraints.iter_mut().enumerate() {
+            for index in 0..self.colors.len() {
+                constraint.update(index, &self.colors[index]);
+            }
+            let (s, j) = constraint.get_min_score();
+            let score = s / *w;
+            if score < min_score.0 {
+                min_score = (score, Metric::Const(i, j));
+            }
+        }
+        self.min_score_metric = min_score.1;
+        assert_eq!(min_score.0, self.best_colors.0);
+    }
+
     pub fn get_best_score(&self) -> f32 {
         self.best_colors.0
     }

@@ -32,9 +32,11 @@ fn main() {
     let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
 
     let num_iter: u64 = 1000000000;
+    let broad_iter = num_iter / 2;
+    let small_iter: u64 = 10000;
     let update_freq: u64 = 1000000;
     // breakpoint();
-    for big_num in 0..1 {
+    for big_num in 0..4 {
         let colors = repeat_with(rand::random).take(8).collect_vec();
         let mut optimizer = Optimizer::new(
             vec![
@@ -52,9 +54,21 @@ fn main() {
             "{elapsed_precise}/{duration_precise} {wide_bar} {percent:>02}% {pos}/{len} {per_sec}",
         ).unwrap());
 
-        for _it in 0..num_iter {
+        let mut counter = 0;
+        let mut best_score = optimizer.get_best_score();
+        for it in 0..num_iter {
             optimizer.update();
-            if _it % update_freq == update_freq - 1 {
+            if it >= broad_iter {
+                counter += 1;
+                if optimizer.get_best_score() > best_score {
+                    counter = 0;
+                    best_score = optimizer.get_best_score();
+                } else if counter >= small_iter {
+                    counter = 0;
+                    optimizer.restore_best();
+                }
+            }
+            if it % update_freq == update_freq - 1 {
                 pb.inc(update_freq)
             }
         }
