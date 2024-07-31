@@ -1,4 +1,5 @@
 mod code;
+mod color_sorting;
 
 pub use code::make_document;
 use color_lib::sRGB;
