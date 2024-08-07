@@ -25,16 +25,14 @@ fn parse_to_sRGB(c: String) -> Option<sRGB> {
 }
 
 fn main() {
-    // cargo run -p palette-visualizer -- #ff0000 #ffff00 #00ff00 #0000ff
-    // cargo run -p palette-visualizer -- '#ff0000' '#ffff00' '#00ff00' '#0000ff'
+    // cargo run -p palette-visualizer -- ff0000 ffff00 00ff00 0000ff
+    // cargo run -p palette-visualizer -- 000000 ff0000 00ff00 0000ff ffff00 ff00ff 00ffff ffffff ff8800
 
     let colors: Vec<_> = env::args()
         .map(parse_to_sRGB)
         .filter(Option::is_some)
         .map(Option::unwrap)
         .collect();
-
-    println!("{}", colors.len());
 
     let start_time = std::time::Instant::now();
 
