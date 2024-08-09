@@ -1,5 +1,6 @@
 use std::f64::consts::TAU;
 
+use color_lib::*;
 use num_integer::Roots;
 
 #[derive(Debug)]
@@ -38,7 +39,7 @@ impl<T: Default> PairMatrix<T> {
 }
 
 impl<T> PairMatrix<T> {
-    fn new_populated<T2>(base: Vec<T2>, f: impl Fn(&T2, &T2) -> T) -> Self {
+    fn new_populated<T2>(base: &Vec<T2>, f: impl Fn(&T2, &T2) -> T) -> Self {
         let n = base.len();
         let mut data = Vec::with_capacity(PairMatrix::<T>::triangle_number(n));
         for j in 1..n {
@@ -77,10 +78,10 @@ impl<T> std::ops::IndexMut<(usize, usize)> for PairMatrix<T> {
     }
 }
 
-pub fn adjacency_matrix(ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> PairMatrix<f64> {
+pub fn adjacency_matrix(ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> PairMatrix<f32> {
     let rings = ring_sizes.len();
     let n = ring_sizes.iter().sum();
-    let mut output = PairMatrix::<f64>::new(n);
+    let mut output = PairMatrix::<f32>::new(n);
 
     let mut prev_ring_sizes = 0;
     for ring in 0..rings {
@@ -105,12 +106,30 @@ pub fn adjacency_matrix(ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> PairMatri
                             (true, false) => (large_angle - start_relative) / small_angle,
                             (false, true) => end_relative / small_angle,
                             (false, false) => 0.0,
-                        }
+                        } as f32;
                 }
             }
         }
         prev_ring_sizes += ring_sizes[ring];
     }
 
+    return output;
+}
+
+pub fn color_pair_matrix(colors: &Vec<sRGB>) -> PairMatrix<f32> {
+    PairMatrix::<f32>::new_populated(colors, |c1, c2| HyAB(&(*c1).into(), &(*c2).into()))
+}
+
+pub fn compute_score(
+    permutation: &Vec<usize>,
+    color_pair_matrix: &PairMatrix<f32>,
+    adjacency_matrix: &PairMatrix<f32>,
+) -> f32 {
+    let mut output = 0.0;
+    for i in 0..permutation.len() - 1 {
+        for j in i + 1..permutation.len() {
+            output += color_pair_matrix[(i, j)] * adjacency_matrix[(permutation[i], permutation[j])]
+        }
+    }
     return output;
 }
