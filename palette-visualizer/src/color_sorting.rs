@@ -1,7 +1,9 @@
 use std::f64::consts::TAU;
 
 use color_lib::*;
+use itertools::iproduct;
 use num_integer::Roots;
+use rand::{distributions, prelude::Distribution, thread_rng};
 
 #[derive(Debug)]
 pub struct PairMatrix<T> {
@@ -64,6 +66,16 @@ impl<T> PairMatrix<T> {
     }
 }
 
+impl<T: Copy> PairMatrix<T> {
+    fn unordered_index(&self, (a, b): (usize, usize)) -> T {
+        if a < b {
+            self[(a, b)]
+        } else {
+            self[(b, a)]
+        }
+    }
+}
+
 impl<T> std::ops::Index<(usize, usize)> for PairMatrix<T> {
     type Output = T;
 
@@ -78,7 +90,7 @@ impl<T> std::ops::IndexMut<(usize, usize)> for PairMatrix<T> {
     }
 }
 
-pub fn adjacency_matrix(ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> PairMatrix<f32> {
+fn adjacency_matrix(ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> PairMatrix<f32> {
     let rings = ring_sizes.len();
     let n = ring_sizes.iter().sum();
     let mut output = PairMatrix::<f32>::new(n);
@@ -116,19 +128,21 @@ pub fn adjacency_matrix(ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> PairMatri
     return output;
 }
 
-pub fn color_pair_matrix(colors: &Vec<sRGB>) -> PairMatrix<f32> {
+fn color_pair_matrix(colors: &Vec<sRGB>) -> PairMatrix<f32> {
     PairMatrix::<f32>::new_populated(colors, |c1, c2| HyAB(&(*c1).into(), &(*c2).into()))
 }
 
-pub fn compute_score(
+fn compute_score(
     permutation: &Vec<usize>,
-    color_pair_matrix: &PairMatrix<f32>,
+
     adjacency_matrix: &PairMatrix<f32>,
+    color_pair_matrix: &PairMatrix<f32>,
 ) -> f32 {
     let mut output = 0.0;
     for i in 0..permutation.len() - 1 {
         for j in i + 1..permutation.len() {
-            output += color_pair_matrix[(i, j)] * adjacency_matrix[(permutation[i], permutation[j])]
+            output += adjacency_matrix[(i, j)]
+                * color_pair_matrix.unordered_index((permutation[i], permutation[j]));
         }
     }
     return output;
@@ -142,18 +156,52 @@ fn get_h(x: &sRGB) -> f32 {
     Oklch::from(*x).h
 }
 
-fn sort_colors_naive(colors: &mut Vec<sRGB>, rings: &Vec<usize>) {
+fn sort_colors_naive(colors: &mut Vec<sRGB>, ring_sizes: &Vec<usize>) {
     colors.sort_unstable_by(|c1, c2| get_c(c1).partial_cmp(&get_c(c2)).unwrap());
     let mut start_index = 0;
-    for ring in rings {
+    for ring in ring_sizes {
         colors[start_index..start_index + ring]
             .sort_unstable_by(|c1, c2| get_h(c1).partial_cmp(&get_h(c2)).unwrap());
         start_index += ring;
     }
 }
 
-pub fn sort_colors_simple(colors: &Vec<sRGB>, rings: &Vec<usize>) -> Vec<sRGB> {
+fn sort_colors_simple(colors: &Vec<sRGB>, ring_sizes: &Vec<usize>) -> Vec<sRGB> {
     let mut output = colors.clone();
-    sort_colors_naive(&mut output, rings);
+    sort_colors_naive(&mut output, ring_sizes);
     output
+}
+
+pub fn sort_colors(colors: &Vec<sRGB>, ring_sizes: &Vec<usize>, angles: &Vec<f64>) -> Vec<sRGB> {
+    let n = colors.len();
+    // start it kinda close to the destination
+    let sorting_colors = sort_colors_simple(colors, ring_sizes);
+    println!("a");
+    let adj = adjacency_matrix(ring_sizes, angles);
+    println!("b");
+    let cpm = color_pair_matrix(&sorting_colors);
+    println!("c");
+    let mut permutation: Vec<usize> = (0..n).collect();
+    let mut best = (compute_score(&permutation, &adj, &cpm), permutation.clone());
+
+    let _pairs: Vec<_> = iproduct!((0..n), (0..n)).filter(|(a, b)| a < b).collect();
+    let dist = distributions::Slice::new(_pairs.as_slice()).unwrap();
+    println!("d");
+    for it in 0..10000000 {
+        let (i, j) = *dist.sample(&mut thread_rng());
+        permutation.swap(i, j);
+        let score = compute_score(&permutation, &adj, &cpm);
+        if score < best.0 {
+            println!("New best!\t{}", score);
+            best = (score, permutation.clone());
+        } else if it % 100 == 99 {
+            permutation = best.1.clone();
+        }
+    }
+
+    let mut output = sorting_colors.clone();
+    for i in 0..n {
+        output[i] = sorting_colors[best.1[i]];
+    }
+    return output;
 }

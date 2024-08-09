@@ -291,14 +291,7 @@ fn make_rings(colors: Vec<sRGB>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
 
     let angles = calculate_angles(&ring_sizes);
 
-    let adj = adjacency_matrix(&ring_sizes, &angles);
-    let cpm = color_pair_matrix(&colors);
-    println!("score:\t{}", compute_score(&(0..n).collect(), &cpm, &adj));
-
-    let sorted_colors = sort_colors_simple(&colors, &ring_sizes);
-
-    let cpm2 = color_pair_matrix(&sorted_colors);
-    println!("score2:\t{}", compute_score(&(0..n).collect(), &cpm2, &adj));
+    let sorted_colors = sort_colors(&colors, &ring_sizes, &angles);
 
     let color_strings = colors_to_strings(&sorted_colors, &ring_sizes);
 
