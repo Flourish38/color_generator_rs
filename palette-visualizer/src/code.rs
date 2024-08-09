@@ -1,12 +1,14 @@
 extern crate color_lib;
 
-use color_lib::{sRGB, to_string, Oklch};
+use color_lib::{sRGB, to_string};
 use std::f64::consts::{PI, TAU};
 use std::f64::INFINITY;
 use svg::node::element::path::Data;
 use svg::node::element::Path;
 use svg::node::Value;
 use svg::Document;
+
+use crate::color_sorting::*;
 
 fn get_position(radius: f64, angle: f64, delta: f64) -> (f64, f64) {
     let (sin, cos) = angle.sin_cos();
@@ -261,24 +263,19 @@ fn calculate_angles(rings: &Vec<usize>) -> Vec<f64> {
     output
 }
 
-fn get_c(x: &sRGB) -> f32 {
-    <sRGB as Into<Oklch>>::into(*x).C
-}
-
-fn get_h(x: &sRGB) -> f32 {
-    <sRGB as Into<Oklch>>::into(*x).h
-}
-
-fn sort_colors(mut colors: Vec<sRGB>, rings: &Vec<usize>) -> Vec<Vec<String>> {
-    colors.sort_by(|c1, c2| get_c(c1).partial_cmp(&get_c(c2)).unwrap());
-    let mut result = Vec::with_capacity(rings.len());
-    for i in 0..rings.len() {
-        let remaining_colors = colors.split_off(rings[i]);
-        colors.sort_by(|c1, c2| get_h(c1).partial_cmp(&get_h(c2)).unwrap());
-        result.push(colors.into_iter().map(|c: [u8; 3]| to_string(&c)).collect());
-        colors = remaining_colors;
+fn colors_to_strings(colors: &Vec<sRGB>, ring_sizes: &Vec<usize>) -> Vec<Vec<String>> {
+    let mut output = Vec::with_capacity(ring_sizes.len());
+    let mut start_index = 0;
+    for ring in ring_sizes {
+        output.push(
+            colors[start_index..start_index + ring]
+                .iter()
+                .map(to_string)
+                .collect(),
+        );
+        start_index += ring;
     }
-    result
+    output
 }
 
 fn make_rings(colors: Vec<sRGB>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
@@ -286,13 +283,24 @@ fn make_rings(colors: Vec<sRGB>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
 
     let ring_sizes = optimize_layers(n);
 
+    println!("{:?}", ring_sizes);
+
     let num_rings = ring_sizes.len();
 
     let radii = calculate_radii(&ring_sizes, radius);
 
     let angles = calculate_angles(&ring_sizes);
 
-    let sorted_colors = sort_colors(colors, &ring_sizes);
+    let adj = adjacency_matrix(&ring_sizes, &angles);
+    let cpm = color_pair_matrix(&colors);
+    println!("score:\t{}", compute_score(&(0..n).collect(), &cpm, &adj));
+
+    let sorted_colors = sort_colors_simple(&colors, &ring_sizes);
+
+    let cpm2 = color_pair_matrix(&sorted_colors);
+    println!("score2:\t{}", compute_score(&(0..n).collect(), &cpm2, &adj));
+
+    let color_strings = colors_to_strings(&sorted_colors, &ring_sizes);
 
     let mut rings = Vec::with_capacity(num_rings);
 
@@ -302,7 +310,7 @@ fn make_rings(colors: Vec<sRGB>, radius: f64, delta: f64) -> Vec<Vec<Path>> {
             angles[i],
             // lines between patches get thinner with more rings
             delta / ((num_rings + 1) as f64).log2(),
-            sorted_colors[i].clone(),
+            color_strings[i].clone(),
         ));
     }
 

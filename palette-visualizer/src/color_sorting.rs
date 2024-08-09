@@ -133,3 +133,27 @@ pub fn compute_score(
     }
     return output;
 }
+
+fn get_c(x: &sRGB) -> f32 {
+    Oklch::from(*x).C
+}
+
+fn get_h(x: &sRGB) -> f32 {
+    Oklch::from(*x).h
+}
+
+fn sort_colors_naive(colors: &mut Vec<sRGB>, rings: &Vec<usize>) {
+    colors.sort_unstable_by(|c1, c2| get_c(c1).partial_cmp(&get_c(c2)).unwrap());
+    let mut start_index = 0;
+    for ring in rings {
+        colors[start_index..start_index + ring]
+            .sort_unstable_by(|c1, c2| get_h(c1).partial_cmp(&get_h(c2)).unwrap());
+        start_index += ring;
+    }
+}
+
+pub fn sort_colors_simple(colors: &Vec<sRGB>, rings: &Vec<usize>) -> Vec<sRGB> {
+    let mut output = colors.clone();
+    sort_colors_naive(&mut output, rings);
+    output
+}
