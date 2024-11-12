@@ -34,6 +34,10 @@ fn main() {
         .map(Option::unwrap)
         .collect();
 
+    if colors.len() == 0 {
+        panic!("Got no colors!")
+    }
+
     let start_time = std::time::Instant::now();
 
     let document = make_document(colors, RADIUS, DELTA);

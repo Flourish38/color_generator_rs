@@ -187,7 +187,7 @@ pub fn sort_colors(colors: &Vec<sRGB>, ring_sizes: &Vec<usize>, angles: &Vec<f64
     let _pairs: Vec<_> = iproduct!((0..n), (0..n)).filter(|(a, b)| a < b).collect();
     let dist = distributions::Slice::new(_pairs.as_slice()).unwrap();
     println!("d");
-    for it in 0..10000000 {
+    for it in 0..100000 {
         let (i, j) = *dist.sample(&mut thread_rng());
         permutation.swap(i, j);
         let score = compute_score(&permutation, &adj, &cpm);

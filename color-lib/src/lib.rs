@@ -33,7 +33,7 @@ impl From<sRGB> for RGB {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Oklab {
     L: f32,
     a: f32,
@@ -104,7 +104,7 @@ pub fn APCA(text: &sRGB, bg: &sRGB) -> f32 {
     const NTX: f32 = 0.57;
     const NBG: f32 = 0.56;
     const RTX: f32 = 0.62;
-    const RGB: f32 = 0.65;
+    const RBG: f32 = 0.65;
     const W_SCALE: f32 = 1.14;
     const W_OFFSET: f32 = 0.027;
 
@@ -114,7 +114,7 @@ pub fn APCA(text: &sRGB, bg: &sRGB) -> f32 {
     let S_apc = if Y_txt < Y_bg {
         Y_bg.powf(NBG) - Y_txt.powf(NTX)
     } else {
-        Y_bg.powf(RGB) - Y_txt.powf(RTX)
+        Y_bg.powf(RBG) - Y_txt.powf(RTX)
     } * W_SCALE;
 
     if S_apc.abs() < W_OFFSET {
