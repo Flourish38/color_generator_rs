@@ -76,6 +76,78 @@ impl Constrained_sRGB {
             .map(|(r, g, b)| [r, g, b])
             .collect()
     }
+
+    fn apply_constraint(&mut self, c_start: sRGB, f: impl Fn(sRGB) -> bool) {
+        // cool spiral algorithm time!!!
+        let start_index = as_index(&c_start);
+        if !self.inside[start_index] || f(c_start) {
+            return;
+        }
+        self.inside.set(start_index, false);
+        let (mut r_min, mut r_max, mut g_min, mut g_max, mut b_min, mut b_max) = (
+            c_start[0], c_start[0], c_start[1], c_start[1], c_start[2], c_start[2],
+        );
+        let (mut r_down, mut r_up, mut g_down, mut g_up, mut b_down, mut b_up) =
+            (true, true, true, true, true, true);
+        loop {
+            let face_iter = if b_up && b_max != 0xFF {
+                b_up = false;
+                b_max = b_max.saturating_add(1);
+                iproduct!(r_min..=r_max, g_min..=g_max, b_max..=b_max)
+            } else if b_down && b_min != 0x00 {
+                b_down = false;
+                b_min = b_min.saturating_sub(1);
+                iproduct!(r_min..=r_max, g_min..=g_max, b_min..=b_min)
+            } else if g_up && g_max != 0xFF {
+                g_up = false;
+                g_max = g_max.saturating_add(1);
+                iproduct!(r_min..=r_max, g_max..=g_max, b_min..=b_max)
+            } else if g_down && g_min != 0x00 {
+                g_down = false;
+                g_min = g_min.saturating_sub(1);
+                iproduct!(r_min..=r_max, g_min..=g_min, b_min..=b_max)
+            } else if r_up && r_max != 0xFF {
+                r_up = false;
+                r_max = r_max.saturating_add(1);
+                iproduct!(r_max..=r_max, g_min..=g_max, b_min..=b_max)
+            } else if r_down && r_min != 0x00 {
+                r_down = false;
+                r_min = r_min.saturating_sub(1);
+                iproduct!(r_min..=r_min, g_min..=g_max, b_min..=b_max)
+            } else {
+                return;
+            };
+            for (r, g, b) in face_iter {
+                let c = [r, g, b];
+                let index = as_index(&c);
+                if !self.inside[index] || f(c) {
+                    continue;
+                }
+                self.inside.set(index, false);
+                self.surface.remove(&c);
+                self.edge.remove(&c);
+                self.corner.remove(&c);
+                if r == r_min {
+                    r_down = true;
+                }
+                if r == r_max {
+                    r_up = true;
+                }
+                if g == g_min {
+                    g_down = true;
+                }
+                if g == g_max {
+                    g_up = true;
+                }
+                if b == b_min {
+                    b_down = true;
+                }
+                if b == b_max {
+                    b_up = true;
+                }
+            }
+        }
+    }
 }
 
 fn main() {
@@ -89,13 +161,42 @@ fn main() {
     // //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
 
-    let start_time = Instant::now();
+    let apca_thresh = 45.0;
 
-    let c_sRGB = Constrained_sRGB::new();
+    let mut start_time = Instant::now();
+
+    let mut c_sRGB = Constrained_sRGB::new();
 
     println!(
-        "{:#?}:\t{}\t{}\t{}",
+        "{:#?}:\t{}\t{}\t{}\t{}",
         start_time.elapsed(),
+        c_sRGB.inside.count_ones(),
+        c_sRGB.surface.len(),
+        c_sRGB.edge.len(),
+        c_sRGB.corner.len()
+    );
+
+    start_time = Instant::now();
+
+    c_sRGB.apply_constraint(bgs[0], |c| APCA(&c, &bgs[0]) > apca_thresh);
+
+    println!(
+        "{:#?}:\t{}\t{}\t{}\t{}",
+        start_time.elapsed(),
+        c_sRGB.inside.count_ones(),
+        c_sRGB.surface.len(),
+        c_sRGB.edge.len(),
+        c_sRGB.corner.len()
+    );
+
+    start_time = Instant::now();
+
+    c_sRGB.apply_constraint(bgs[1], |c| APCA(&c, &bgs[1]) > apca_thresh);
+
+    println!(
+        "{:#?}:\t{}\t{}\t{}\t{}",
+        start_time.elapsed(),
+        c_sRGB.inside.count_ones(),
         c_sRGB.surface.len(),
         c_sRGB.edge.len(),
         c_sRGB.corner.len()
