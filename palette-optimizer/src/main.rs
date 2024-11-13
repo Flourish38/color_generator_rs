@@ -6,13 +6,13 @@ mod optimizer;
 mod score;
 mod update;
 
+use bitvec::{bitvec, vec::BitVec};
 use color_lib::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::{iproduct, Itertools};
 use metric::*;
 use optimizer::Optimizer;
 use palette_visualizer::save_svg;
-use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::repeat_with,
@@ -26,64 +26,55 @@ fn breakpoint() {
     std::io::stdin().read_line(&mut buf).unwrap();
 }
 
-#[derive(Clone, Copy)]
-enum Status {
-    Inside,
-    Face,
-    Edge,
-    Corner,
-    Outside,
+struct Constrained_sRGB {
+    inside: BitVec,
+    surface: HashSet<sRGB>,
+    edge: HashSet<sRGB>,
+    corner: HashSet<sRGB>,
 }
 
-impl Status {
-    fn upgrade(self) -> Self {
-        match self {
-            Self::Inside => Self::Face,
-            Self::Face => Self::Edge,
-            Self::Edge | Self::Corner => Self::Corner,
-            Self::Outside => Self::Outside,
+impl Constrained_sRGB {
+    fn new() -> Self {
+        Self {
+            inside: BitVec::repeat(true, 1 << 24),
+            surface: Self::surfaces(),
+            edge: Self::edges(),
+            corner: Self::corners(),
         }
     }
-}
 
-fn flood_fill(
-    within_constraint: &HashMap<sRGB, Status>,
-    c_start: sRGB,
-    f: impl Fn(sRGB) -> bool,
-) -> Vec<(sRGB, Status)> {
-    let mut visited = HashSet::from([c_start]);
-    let mut queued =
-        VecDeque::from([(c_start, within_constraint.get(&c_start).unwrap().upgrade())]);
-    let mut changes = vec![];
-    while let Some((c, status)) = queued.pop_front() {
-        if f(c) {
-            changes.push((c, Status::Outside));
-            for (sign, axis) in iproduct!([1, -1], [0, 1, 2]) {
-                let mut new_c = c;
-                new_c[axis] = u8::saturating_add_signed(new_c[axis], sign);
-                match (visited.contains(&new_c), within_constraint.get(&new_c)) {
-                    (true, _) => continue,
-                    (_, None) => continue,
-                    (_, Some(new_status)) => {
-                        queued.push_back((new_c, new_status.upgrade()));
-                        visited.insert(new_c);
-                    }
-                };
-            }
-        } else {
-            changes.push((c, status));
-        }
+    fn surfaces() -> HashSet<sRGB> {
+        iproduct!(0x00..=0x00, 0x00..=0xFF, 0x00..=0xFF)
+            .chain(iproduct!(0xFF..=0xFF, 0x00..=0xFF, 0x00..=0xFF))
+            .chain(iproduct!(0x00..=0xFF, 0x00..=0x00, 0x00..=0xFF))
+            .chain(iproduct!(0x00..=0xFF, 0xFF..=0xFF, 0x00..=0xFF))
+            .chain(iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0x00))
+            .chain(iproduct!(0x00..=0xFF, 0x00..=0xFF, 0xFF..=0xFF))
+            .map(|(r, g, b)| [r, g, b])
+            .collect()
     }
-    changes
-}
 
-fn apply_changes(within_constraint: &mut HashMap<sRGB, Status>, changes: Vec<(sRGB, Status)>) {
-    for (c, s) in changes {
-        if let Status::Outside = s {
-            within_constraint.remove(&c);
-        } else {
-            within_constraint.insert(c, s);
-        }
+    fn edges() -> HashSet<sRGB> {
+        iproduct!(0x00..=0x00, 0x00..=0x00, 0x00..=0xFF)
+            .chain(iproduct!(0x00..=0x00, 0xFF..=0xFF, 0x00..=0xFF))
+            .chain(iproduct!(0xFF..=0xFF, 0x00..=0x00, 0x00..=0xFF))
+            .chain(iproduct!(0xFF..=0xFF, 0xFF..=0xFF, 0x00..=0xFF))
+            .chain(iproduct!(0x00..=0x00, 0x00..=0xFF, 0x00..=0x00))
+            .chain(iproduct!(0x00..=0x00, 0x00..=0xFF, 0xFF..=0xFF))
+            .chain(iproduct!(0xFF..=0xFF, 0x00..=0xFF, 0x00..=0x00))
+            .chain(iproduct!(0xFF..=0xFF, 0x00..=0xFF, 0xFF..=0xFF))
+            .chain(iproduct!(0x00..=0xFF, 0x00..=0x00, 0x00..=0x00))
+            .chain(iproduct!(0x00..=0xFF, 0x00..=0x00, 0xFF..=0xFF))
+            .chain(iproduct!(0x00..=0xFF, 0xFF..=0xFF, 0x00..=0x00))
+            .chain(iproduct!(0x00..=0xFF, 0xFF..=0xFF, 0xFF..=0xFF))
+            .map(|(r, g, b)| [r, g, b])
+            .collect()
+    }
+
+    fn corners() -> HashSet<sRGB> {
+        iproduct!([0x00, 0xFF], [0x00, 0xFF], [0x00, 0xFF])
+            .map(|(r, g, b)| [r, g, b])
+            .collect()
     }
 }
 
@@ -97,47 +88,18 @@ fn main() {
     // // let constraint_lut =
     // //     SrgbLut::new_constraint(&backgrounds, |c1, c2| HyAB(c1, &color_lut.get(c2)));
     // let apca_constraint_lut = SrgbLut::new_constraint(&bgs.to_vec(), |c1, c2| APCA(c2, c1));
-    let apca_thresh = 48.0;
-    let hyab_thresh = 25.0;
 
-    println!("{:?}", Instant::now());
+    let start_time = Instant::now();
 
-    let mut within_constraint: HashMap<sRGB, Status> =
-        iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF)
-            .map(|(r, g, b)| {
-                let srgb = [r, g, b];
-                let r_surface = match r {
-                    0x00 | 0xFF => 1,
-                    _ => 0,
-                };
-                let g_surface = match g {
-                    0x00 | 0xFF => 1,
-                    _ => 0,
-                };
-                let b_surface = match b {
-                    0x00 | 0xFF => 1,
-                    _ => 0,
-                };
-                let surfaces = r_surface + g_surface + b_surface;
-                let status = match surfaces {
-                    0 => Status::Inside,
-                    1 => Status::Face,
-                    2 => Status::Edge,
-                    3 => Status::Corner,
-                    _ => unreachable!(),
-                };
-                (srgb, status)
-            })
-            .collect();
+    let c_sRGB = Constrained_sRGB::new();
 
-    println!("{:?}", Instant::now());
-
-    for bg in bgs {
-        let start_time = Instant::now();
-        let changes = flood_fill(&within_constraint, bg, |c| APCA(&c, &bg) < apca_thresh);
-        println!("{:#?}\t{} changes", start_time.elapsed(), changes.len());
-        apply_changes(&mut within_constraint, changes);
-    }
+    println!(
+        "{:#?}:\t{}\t{}\t{}",
+        start_time.elapsed(),
+        c_sRGB.surface.len(),
+        c_sRGB.edge.len(),
+        c_sRGB.corner.len()
+    );
 
     // let mut output_colors = vec![];
     // let start_time = Instant::now();
