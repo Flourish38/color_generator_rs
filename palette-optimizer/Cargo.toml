@@ -12,3 +12,4 @@ color-lib = { path = "../color-lib" }
 palette-visualizer = { path = "../palette-visualizer" }
 rand = "0.8.5"
 once_cell = "1.19.0"
+rayon = "1.10.0"
