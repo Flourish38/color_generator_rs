@@ -26,14 +26,20 @@ fn breakpoint() {
     std::io::stdin().read_line(&mut buf).unwrap();
 }
 
-#[derive(Clone, Copy)]
+enum Color {
+    Red = 0,
+    Green = 1,
+    Blue = 2,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Face {
-    RNeg,
-    RPos,
-    GNeg,
-    GPos,
-    BNeg,
-    BPos,
+    RNeg = 0,
+    RPos = 1,
+    GNeg = 2,
+    GPos = 3,
+    BNeg = 4,
+    BPos = 5,
 }
 const R_NEG: Face = Face::RNeg;
 const R_POS: Face = Face::RPos;
@@ -55,6 +61,64 @@ impl Face {
             Face::BNeg => [r, g, b.saturating_add(1)],
             Face::BPos => [r, g, b.saturating_sub(1)],
         }
+    }
+
+    fn is_at_limit(&self, extents: [u8; 6]) -> bool {
+        let index = *self as usize;
+        if self.is_pos() {
+            extents[index] == 0xFF
+        } else {
+            extents[index] == 0x00
+        }
+    }
+
+    fn is_pos(&self) -> bool {
+        match self {
+            Face::RNeg | Face::GNeg | Face::BNeg => false,
+            Face::RPos | Face::GPos | Face::BPos => true,
+        }
+    }
+
+    fn sign(&self) -> i8 {
+        if self.is_pos() {
+            1
+        } else {
+            -1
+        }
+    }
+
+    fn color(&self) -> Color {
+        match self {
+            Face::RNeg | Face::RPos => Color::Red,
+            Face::GNeg | Face::GPos => Color::Green,
+            Face::BNeg | Face::BPos => Color::Blue,
+        }
+    }
+
+    fn iter(&self, extents: [u8; 6]) -> impl Iterator<Item = sRGB> {
+        let index = *self as usize;
+        match self.color() {
+            Color::Red => iproduct!(
+                extents[index]..=extents[index],
+                extents[G_NEG as usize]..=extents[G_POS as usize],
+                extents[B_NEG as usize]..=extents[B_POS as usize]
+            ),
+            Color::Green => iproduct!(
+                extents[R_NEG as usize]..=extents[R_POS as usize],
+                extents[index]..=extents[index],
+                extents[B_NEG as usize]..=extents[B_POS as usize]
+            ),
+            Color::Blue => iproduct!(
+                extents[R_NEG as usize]..=extents[R_POS as usize],
+                extents[G_NEG as usize]..=extents[G_POS as usize],
+                extents[index]..=extents[index]
+            ),
+        }
+        .map(|(r, g, b)| [r, g, b])
+    }
+
+    fn is_on_face(&self, c: sRGB, extents: [u8; 6]) -> bool {
+        c[self.color() as usize] == extents[*self as usize]
     }
 }
 
@@ -196,64 +260,33 @@ impl Constrained_sRGB {
             return;
         }
         self.inside.set(start_index, false);
-        let (mut r_min, mut r_max, mut g_min, mut g_max, mut b_min, mut b_max) = (
+        let mut extents = [
             c_start[0], c_start[0], c_start[1], c_start[1], c_start[2], c_start[2],
-        );
-        let (mut r_down, mut r_up, mut g_down, mut g_up, mut b_down, mut b_up) =
-            (true, true, true, true, true, true);
+        ];
+        let mut expand = [true; 6];
         let mut face_masks = FaceMasks::new();
         for face in Face::VARIANTS {
             face_masks.set(face, c_start, true);
         }
         let mut update_set = HashSet::new();
-        loop {
-            let (face, face_iter) = if b_up && b_max != 0xFF {
-                b_up = false;
-                b_max = b_max.saturating_add(1);
-                (
-                    B_POS,
-                    iproduct!(r_min..=r_max, g_min..=g_max, b_max..=b_max),
-                )
-            } else if b_down && b_min != 0x00 {
-                b_down = false;
-                b_min = b_min.saturating_sub(1);
-                (
-                    B_NEG,
-                    iproduct!(r_min..=r_max, g_min..=g_max, b_min..=b_min),
-                )
-            } else if g_up && g_max != 0xFF {
-                g_up = false;
-                g_max = g_max.saturating_add(1);
-                (
-                    G_POS,
-                    iproduct!(r_min..=r_max, g_max..=g_max, b_min..=b_max),
-                )
-            } else if g_down && g_min != 0x00 {
-                g_down = false;
-                g_min = g_min.saturating_sub(1);
-                (
-                    G_NEG,
-                    iproduct!(r_min..=r_max, g_min..=g_min, b_min..=b_max),
-                )
-            } else if r_up && r_max != 0xFF {
-                r_up = false;
-                r_max = r_max.saturating_add(1);
-                (
-                    R_POS,
-                    iproduct!(r_max..=r_max, g_min..=g_max, b_min..=b_max),
-                )
-            } else if r_down && r_min != 0x00 {
-                r_down = false;
-                r_min = r_min.saturating_sub(1);
-                (
-                    R_NEG,
-                    iproduct!(r_min..=r_min, g_min..=g_max, b_min..=b_max),
-                )
-            } else {
-                break;
-            };
-            for (r, g, b) in face_iter {
-                let c = [r, g, b];
+        'outer: loop {
+            // These values shouldn't need to be initialized, but whatever
+            let mut face = R_NEG;
+            let mut face_iter = face.iter(extents);
+
+            for f in Face::VARIANTS.iter().rev() {
+                let i = *f as usize;
+                if expand[i] && !f.is_at_limit(extents) {
+                    expand[i] = false;
+                    face = *f;
+                    extents[i] = extents[i].saturating_add_signed(f.sign());
+                    face_iter = f.iter(extents);
+                    break;
+                } else if f == Face::VARIANTS.first().unwrap() {
+                    break 'outer;
+                }
+            }
+            for c in face_iter {
                 let index = as_index(&c);
                 if face_masks.check_ahead(face, c) {
                     update_set.insert(face.offset(c));
@@ -278,47 +311,24 @@ impl Constrained_sRGB {
                     }
                 }
 
-                if r == r_min {
-                    face_masks.set(R_NEG, c, !still_inside);
-                    if !still_inside {
-                        r_down = true;
-                    }
-                }
-                if r == r_max {
-                    face_masks.set(R_POS, c, !still_inside);
-                    if !still_inside {
-                        r_up = true;
-                    }
-                }
-                if g == g_min {
-                    face_masks.set(G_NEG, c, !still_inside);
-                    if !still_inside {
-                        g_down = true;
-                    }
-                }
-                if g == g_max {
-                    face_masks.set(G_POS, c, !still_inside);
-                    if !still_inside {
-                        g_up = true;
-                    }
-                }
-                if b == b_min {
-                    face_masks.set(B_NEG, c, !still_inside);
-                    if !still_inside {
-                        b_down = true;
-                    }
-                }
-                if b == b_max {
-                    face_masks.set(B_POS, c, !still_inside);
-                    if !still_inside {
-                        b_up = true;
+                for f in Face::VARIANTS {
+                    if f.is_on_face(c, extents) {
+                        if !still_inside {
+                            face_masks.set(f, c, true);
+                            expand[f as usize] = true;
+                        }
                     }
                 }
             }
         }
         println!(
             "{}:{}\t{}:{}\t{}:{}",
-            r_min, r_max, g_min, g_max, b_min, b_max
+            extents[R_NEG as usize],
+            extents[R_POS as usize],
+            extents[G_NEG as usize],
+            extents[G_POS as usize],
+            extents[B_NEG as usize],
+            extents[B_POS as usize]
         );
         println!("{}", update_set.len());
         for c in update_set {
@@ -328,7 +338,7 @@ impl Constrained_sRGB {
                 }
             }
         }
-        println!("{:#?}", self.corner);
+        // println!("{:#?}", self.corner);
     }
 }
 
