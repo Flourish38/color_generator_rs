@@ -6,7 +6,7 @@ mod optimizer;
 mod score;
 mod update;
 
-use bitvec::{bitvec, vec::BitVec};
+use bitvec::{bitvec, index, vec::BitVec};
 use color_lib::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::{iproduct, Itertools};
@@ -16,7 +16,7 @@ use palette_visualizer::save_svg;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::repeat_with,
-    ops::Not,
+    ops::{Not, SubAssign},
     time::Instant,
 };
 
@@ -24,6 +24,118 @@ use std::{
 fn breakpoint() {
     let mut buf = String::new();
     std::io::stdin().read_line(&mut buf).unwrap();
+}
+
+#[derive(Clone, Copy)]
+enum Face {
+    RNeg,
+    RPos,
+    GNeg,
+    GPos,
+    BNeg,
+    BPos,
+}
+const R_NEG: Face = Face::RNeg;
+const R_POS: Face = Face::RPos;
+const G_NEG: Face = Face::GNeg;
+const G_POS: Face = Face::GPos;
+const B_NEG: Face = Face::BNeg;
+const B_POS: Face = Face::BPos;
+
+impl Face {
+    const VARIANTS: [Face; 6] = [R_NEG, R_POS, G_NEG, G_POS, B_NEG, B_POS];
+
+    fn offset(&self, c: sRGB) -> sRGB {
+        let [r, g, b] = c;
+        match self {
+            Face::RNeg => [r.saturating_add(1), g, b],
+            Face::RPos => [r.saturating_sub(1), g, b],
+            Face::GNeg => [r, g.saturating_add(1), b],
+            Face::GPos => [r, g.saturating_sub(1), b],
+            Face::BNeg => [r, g, b.saturating_add(1)],
+            Face::BPos => [r, g, b.saturating_sub(1)],
+        }
+    }
+}
+
+struct FaceMasks {
+    r_neg: BitVec,
+    r_pos: BitVec,
+    g_neg: BitVec,
+    g_pos: BitVec,
+    b_neg: BitVec,
+    b_pos: BitVec,
+}
+
+impl FaceMasks {
+    fn new() -> Self {
+        Self {
+            r_neg: BitVec::repeat(false, 1 << 16),
+            r_pos: BitVec::repeat(false, 1 << 16),
+            g_neg: BitVec::repeat(false, 1 << 16),
+            g_pos: BitVec::repeat(false, 1 << 16),
+            b_neg: BitVec::repeat(false, 1 << 16),
+            b_pos: BitVec::repeat(false, 1 << 16),
+        }
+    }
+
+    fn r_index(c: sRGB) -> usize {
+        ((c[1] as usize) << 8) & c[2] as usize
+    }
+
+    fn g_index(c: sRGB) -> usize {
+        ((c[0] as usize) << 8) & c[2] as usize
+    }
+
+    fn b_index(c: sRGB) -> usize {
+        ((c[0] as usize) << 8) & c[1] as usize
+    }
+
+    fn set(&mut self, face: Face, c: sRGB, value: bool) {
+        match face {
+            Face::RNeg => self.r_neg.set(Self::r_index(c), value),
+            Face::RPos => self.r_pos.set(Self::r_index(c), value),
+            Face::GNeg => self.g_neg.set(Self::g_index(c), value),
+            Face::GPos => self.g_pos.set(Self::g_index(c), value),
+            Face::BNeg => self.b_neg.set(Self::b_index(c), value),
+            Face::BPos => self.b_pos.set(Self::b_index(c), value),
+        }
+    }
+
+    fn get(&self, face: Face, c: sRGB, offset: isize) -> Option<bool> {
+        match face {
+            Face::RNeg => Self::r_index(c)
+                .checked_add_signed(offset)
+                .and_then(|index| self.r_neg.get(index)),
+            Face::RPos => Self::r_index(c)
+                .checked_add_signed(offset)
+                .and_then(|index| self.r_pos.get(index)),
+            Face::GNeg => Self::g_index(c)
+                .checked_add_signed(offset)
+                .and_then(|index| self.g_neg.get(index)),
+            Face::GPos => Self::g_index(c)
+                .checked_add_signed(offset)
+                .and_then(|index| self.g_pos.get(index)),
+            Face::BNeg => Self::b_index(c)
+                .checked_add_signed(offset)
+                .and_then(|index| self.b_neg.get(index)),
+            Face::BPos => Self::b_index(c)
+                .checked_add_signed(offset)
+                .and_then(|index| self.b_pos.get(index)),
+        }
+        .and_then(|br| Some(*br))
+    }
+
+    fn check_behind(&self, face: Face, c: sRGB) -> bool {
+        self.get(face, c, -256).unwrap_or(false)
+            || self.get(face, c, -1).unwrap_or(false)
+            || self.get(face, c, 0).unwrap_or(false)
+    }
+
+    fn check_ahead(&self, face: Face, c: sRGB) -> bool {
+        (self.get(face, c, 256).unwrap_or(false) || self.get(face, c, 1).unwrap_or(false))
+            && !self.get(face, c, 0).unwrap_or(false)
+    }
 }
 
 struct Constrained_sRGB {
@@ -89,69 +201,139 @@ impl Constrained_sRGB {
         );
         let (mut r_down, mut r_up, mut g_down, mut g_up, mut b_down, mut b_up) =
             (true, true, true, true, true, true);
+        let mut face_masks = FaceMasks::new();
+        for face in Face::VARIANTS {
+            face_masks.set(face, c_start, true);
+        }
+        let mut update_set = HashSet::new();
         loop {
-            let face_iter = if b_up && b_max != 0xFF {
+            let (face, face_iter) = if b_up && b_max != 0xFF {
                 b_up = false;
                 b_max = b_max.saturating_add(1);
-                iproduct!(r_min..=r_max, g_min..=g_max, b_max..=b_max)
+                (
+                    B_POS,
+                    iproduct!(r_min..=r_max, g_min..=g_max, b_max..=b_max),
+                )
             } else if b_down && b_min != 0x00 {
                 b_down = false;
                 b_min = b_min.saturating_sub(1);
-                iproduct!(r_min..=r_max, g_min..=g_max, b_min..=b_min)
+                (
+                    B_NEG,
+                    iproduct!(r_min..=r_max, g_min..=g_max, b_min..=b_min),
+                )
             } else if g_up && g_max != 0xFF {
                 g_up = false;
                 g_max = g_max.saturating_add(1);
-                iproduct!(r_min..=r_max, g_max..=g_max, b_min..=b_max)
+                (
+                    G_POS,
+                    iproduct!(r_min..=r_max, g_max..=g_max, b_min..=b_max),
+                )
             } else if g_down && g_min != 0x00 {
                 g_down = false;
                 g_min = g_min.saturating_sub(1);
-                iproduct!(r_min..=r_max, g_min..=g_min, b_min..=b_max)
+                (
+                    G_NEG,
+                    iproduct!(r_min..=r_max, g_min..=g_min, b_min..=b_max),
+                )
             } else if r_up && r_max != 0xFF {
                 r_up = false;
                 r_max = r_max.saturating_add(1);
-                iproduct!(r_max..=r_max, g_min..=g_max, b_min..=b_max)
+                (
+                    R_POS,
+                    iproduct!(r_max..=r_max, g_min..=g_max, b_min..=b_max),
+                )
             } else if r_down && r_min != 0x00 {
                 r_down = false;
                 r_min = r_min.saturating_sub(1);
-                iproduct!(r_min..=r_min, g_min..=g_max, b_min..=b_max)
+                (
+                    R_NEG,
+                    iproduct!(r_min..=r_min, g_min..=g_max, b_min..=b_max),
+                )
             } else {
-                return;
+                break;
             };
             for (r, g, b) in face_iter {
                 let c = [r, g, b];
                 let index = as_index(&c);
-                if !self.inside[index] || f(c) {
+                if face_masks.check_ahead(face, c) {
+                    update_set.insert(face.offset(c));
+                }
+                if !self.inside[index] {
+                    face_masks.set(face, c, false);
                     continue;
                 }
-                self.inside.set(index, false);
-                self.surface.remove(&c);
-                self.edge.remove(&c);
-                self.corner.remove(&c);
+                let still_inside = f(c);
+                if still_inside {
+                    if face_masks.check_behind(face, c) {
+                        update_set.insert(c);
+                    }
+                    face_masks.set(face, c, false);
+                } else {
+                    self.inside.set(index, false);
+                    self.surface.remove(&c);
+                    self.edge.remove(&c);
+                    self.corner.remove(&c);
+                    if !face_masks.get(face, c, 0).unwrap_or(true) {
+                        update_set.insert(face.offset(c));
+                    }
+                }
+
                 if r == r_min {
-                    r_down = true;
+                    face_masks.set(R_NEG, c, !still_inside);
+                    if !still_inside {
+                        r_down = true;
+                    }
                 }
                 if r == r_max {
-                    r_up = true;
+                    face_masks.set(R_POS, c, !still_inside);
+                    if !still_inside {
+                        r_up = true;
+                    }
                 }
                 if g == g_min {
-                    g_down = true;
+                    face_masks.set(G_NEG, c, !still_inside);
+                    if !still_inside {
+                        g_down = true;
+                    }
                 }
                 if g == g_max {
-                    g_up = true;
+                    face_masks.set(G_POS, c, !still_inside);
+                    if !still_inside {
+                        g_up = true;
+                    }
                 }
                 if b == b_min {
-                    b_down = true;
+                    face_masks.set(B_NEG, c, !still_inside);
+                    if !still_inside {
+                        b_down = true;
+                    }
                 }
                 if b == b_max {
-                    b_up = true;
+                    face_masks.set(B_POS, c, !still_inside);
+                    if !still_inside {
+                        b_up = true;
+                    }
                 }
             }
         }
+        println!(
+            "{}:{}\t{}:{}\t{}:{}",
+            r_min, r_max, g_min, g_max, b_min, b_max
+        );
+        println!("{}", update_set.len());
+        for c in update_set {
+            if !self.surface.insert(c) {
+                if !self.edge.insert(c) {
+                    self.corner.insert(c);
+                }
+            }
+        }
+        println!("{:#?}", self.corner);
     }
 }
 
 fn main() {
-    let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
+    let bgs = [[0xFF, 0xFF, 0xFF], [0x00, 0x00, 0x00]];
     // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
     // let color_lut = SrgbLut::new(Oklab::from);
     // let prot_lut = SrgbLut::new(simulate_protan);
