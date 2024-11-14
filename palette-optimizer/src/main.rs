@@ -313,8 +313,8 @@ impl Constrained_sRGB {
 
                 for f in Face::VARIANTS {
                     if f.is_on_face(c, extents) {
+                        face_masks.set(f, c, !still_inside);
                         if !still_inside {
-                            face_masks.set(f, c, true);
                             expand[f as usize] = true;
                         }
                     }
@@ -343,7 +343,7 @@ impl Constrained_sRGB {
 }
 
 fn main() {
-    let bgs = [[0xFF, 0xFF, 0xFF], [0x00, 0x00, 0x00]];
+    let bgs = [[0x00, 0x00, 0x00], [0xFF, 0xFF, 0xFF]];
     // let backgrounds = bgs.iter().map(|c| (*c).into()).collect_vec();
     // let color_lut = SrgbLut::new(Oklab::from);
     // let prot_lut = SrgbLut::new(simulate_protan);
@@ -368,6 +368,32 @@ fn main() {
         c_sRGB.corner.len()
     );
 
+    let mut count = 0;
+    for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
+        let c = [r, g, b];
+        let i = as_index(&c);
+        if c_sRGB.inside[i] {
+            for face in Face::VARIANTS {
+                let mut c2 = c;
+                match c2[face.color() as usize].checked_add_signed(face.sign()) {
+                    Some(n) => {
+                        c2[face.color() as usize] = n;
+                        let i2 = as_index(&c2);
+                        if !c_sRGB.inside[i2] {
+                            count += 1;
+                            break;
+                        }
+                    }
+                    None => {
+                        count += 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    println!("{}\n", count);
+
     start_time = Instant::now();
 
     c_sRGB.apply_constraint(bgs[0], |c| APCA(&c, &bgs[0]) > apca_thresh);
@@ -381,6 +407,32 @@ fn main() {
         c_sRGB.corner.len()
     );
 
+    let mut count = 0;
+    for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
+        let c = [r, g, b];
+        let i = as_index(&c);
+        if c_sRGB.inside[i] {
+            for face in Face::VARIANTS {
+                let mut c2 = c;
+                match c2[face.color() as usize].checked_add_signed(face.sign()) {
+                    Some(n) => {
+                        c2[face.color() as usize] = n;
+                        let i2 = as_index(&c2);
+                        if !c_sRGB.inside[i2] {
+                            count += 1;
+                            break;
+                        }
+                    }
+                    None => {
+                        count += 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    println!("{}\n", count);
+
     start_time = Instant::now();
 
     c_sRGB.apply_constraint(bgs[1], |c| APCA(&c, &bgs[1]) > apca_thresh);
@@ -393,6 +445,25 @@ fn main() {
         c_sRGB.edge.len(),
         c_sRGB.corner.len()
     );
+
+    let mut count = 0;
+    for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
+        let c = [r, g, b];
+        let i = as_index(&c);
+        if c_sRGB.inside[i] {
+            for face in Face::VARIANTS {
+                let mut c2 = c;
+                c2[face.color() as usize] =
+                    c2[face.color() as usize].saturating_add_signed(face.sign());
+                let i2 = as_index(&c2);
+                if !c_sRGB.inside[i2] {
+                    count += 1;
+                    break;
+                }
+            }
+        }
+    }
+    println!("{}\n", count);
 
     // let mut output_colors = vec![];
     // let start_time = Instant::now();
