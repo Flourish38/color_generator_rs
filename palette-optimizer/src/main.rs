@@ -120,74 +120,44 @@ impl Face {
     fn is_on_face(&self, c: sRGB, extents: [u8; 6]) -> bool {
         c[self.color() as usize] == extents[*self as usize]
     }
+
+    fn index(&self, c: sRGB) -> usize {
+        match self.color() {
+            Color::Red => ((c[1] as usize) << 8) & c[2] as usize,
+            Color::Green => ((c[0] as usize) << 8) & c[2] as usize,
+            Color::Blue => ((c[0] as usize) << 8) & c[1] as usize,
+        }
+    }
 }
 
 struct FaceMasks {
-    r_neg: BitVec,
-    r_pos: BitVec,
-    g_neg: BitVec,
-    g_pos: BitVec,
-    b_neg: BitVec,
-    b_pos: BitVec,
+    masks: [BitVec; 6],
 }
 
 impl FaceMasks {
     fn new() -> Self {
+        let bv = BitVec::repeat(false, 1 << 16);
         Self {
-            r_neg: BitVec::repeat(false, 1 << 16),
-            r_pos: BitVec::repeat(false, 1 << 16),
-            g_neg: BitVec::repeat(false, 1 << 16),
-            g_pos: BitVec::repeat(false, 1 << 16),
-            b_neg: BitVec::repeat(false, 1 << 16),
-            b_pos: BitVec::repeat(false, 1 << 16),
+            masks: [
+                bv.clone(),
+                bv.clone(),
+                bv.clone(),
+                bv.clone(),
+                bv.clone(),
+                bv,
+            ],
         }
-    }
-
-    fn r_index(c: sRGB) -> usize {
-        ((c[1] as usize) << 8) & c[2] as usize
-    }
-
-    fn g_index(c: sRGB) -> usize {
-        ((c[0] as usize) << 8) & c[2] as usize
-    }
-
-    fn b_index(c: sRGB) -> usize {
-        ((c[0] as usize) << 8) & c[1] as usize
     }
 
     fn set(&mut self, face: Face, c: sRGB, value: bool) {
-        match face {
-            Face::RNeg => self.r_neg.set(Self::r_index(c), value),
-            Face::RPos => self.r_pos.set(Self::r_index(c), value),
-            Face::GNeg => self.g_neg.set(Self::g_index(c), value),
-            Face::GPos => self.g_pos.set(Self::g_index(c), value),
-            Face::BNeg => self.b_neg.set(Self::b_index(c), value),
-            Face::BPos => self.b_pos.set(Self::b_index(c), value),
-        }
+        self.masks[face as usize].set(face.index(c), value);
     }
 
     fn get(&self, face: Face, c: sRGB, offset: isize) -> Option<bool> {
-        match face {
-            Face::RNeg => Self::r_index(c)
-                .checked_add_signed(offset)
-                .and_then(|index| self.r_neg.get(index)),
-            Face::RPos => Self::r_index(c)
-                .checked_add_signed(offset)
-                .and_then(|index| self.r_pos.get(index)),
-            Face::GNeg => Self::g_index(c)
-                .checked_add_signed(offset)
-                .and_then(|index| self.g_neg.get(index)),
-            Face::GPos => Self::g_index(c)
-                .checked_add_signed(offset)
-                .and_then(|index| self.g_pos.get(index)),
-            Face::BNeg => Self::b_index(c)
-                .checked_add_signed(offset)
-                .and_then(|index| self.b_neg.get(index)),
-            Face::BPos => Self::b_index(c)
-                .checked_add_signed(offset)
-                .and_then(|index| self.b_pos.get(index)),
-        }
-        .and_then(|br| Some(*br))
+        face.index(c)
+            .checked_add_signed(offset)
+            .and_then(|index| self.masks[face as usize].get(index))
+            .and_then(|br| Some(*br))
     }
 
     fn check_behind(&self, face: Face, c: sRGB) -> bool {
@@ -291,16 +261,15 @@ impl Constrained_sRGB {
                 if face_masks.check_ahead(face, c) {
                     update_set.insert(face.offset(c));
                 }
-                if !self.inside[index] {
-                    face_masks.set(face, c, false);
-                    continue;
-                }
+                let inside = self.inside[index];
                 let still_inside = f(c);
-                if still_inside {
+                let was_inside = inside && !still_inside;
+                if !inside {
+                    // do nothing, will get addressed later
+                } else if still_inside {
                     if face_masks.check_behind(face, c) {
                         update_set.insert(c);
                     }
-                    face_masks.set(face, c, false);
                 } else {
                     self.inside.set(index, false);
                     self.surface.remove(&c);
@@ -313,8 +282,8 @@ impl Constrained_sRGB {
 
                 for f in Face::VARIANTS {
                     if f.is_on_face(c, extents) {
-                        face_masks.set(f, c, !still_inside);
-                        if !still_inside {
+                        face_masks.set(f, c, was_inside);
+                        if was_inside {
                             expand[f as usize] = true;
                         }
                     }
@@ -368,7 +337,7 @@ fn main() {
         c_sRGB.corner.len()
     );
 
-    let mut count = 0;
+    let mut true_surface = HashSet::new();
     for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
         let c = [r, g, b];
         let i = as_index(&c);
@@ -380,19 +349,19 @@ fn main() {
                         c2[face.color() as usize] = n;
                         let i2 = as_index(&c2);
                         if !c_sRGB.inside[i2] {
-                            count += 1;
+                            true_surface.insert(c);
                             break;
                         }
                     }
                     None => {
-                        count += 1;
+                        true_surface.insert(c);
                         break;
                     }
                 }
             }
         }
     }
-    println!("{}\n", count);
+    println!("{}\n", true_surface.len());
 
     start_time = Instant::now();
 
@@ -407,7 +376,7 @@ fn main() {
         c_sRGB.corner.len()
     );
 
-    let mut count = 0;
+    let mut true_surface = HashSet::new();
     for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
         let c = [r, g, b];
         let i = as_index(&c);
@@ -419,19 +388,19 @@ fn main() {
                         c2[face.color() as usize] = n;
                         let i2 = as_index(&c2);
                         if !c_sRGB.inside[i2] {
-                            count += 1;
+                            true_surface.insert(c);
                             break;
                         }
                     }
                     None => {
-                        count += 1;
+                        true_surface.insert(c);
                         break;
                     }
                 }
             }
         }
     }
-    println!("{}\n", count);
+    println!("{}\n", true_surface.len());
 
     start_time = Instant::now();
 
@@ -446,24 +415,31 @@ fn main() {
         c_sRGB.corner.len()
     );
 
-    let mut count = 0;
+    let mut true_surface = HashSet::new();
     for (r, g, b) in iproduct!(0x00..=0xFF, 0x00..=0xFF, 0x00..=0xFF) {
         let c = [r, g, b];
         let i = as_index(&c);
         if c_sRGB.inside[i] {
             for face in Face::VARIANTS {
                 let mut c2 = c;
-                c2[face.color() as usize] =
-                    c2[face.color() as usize].saturating_add_signed(face.sign());
-                let i2 = as_index(&c2);
-                if !c_sRGB.inside[i2] {
-                    count += 1;
-                    break;
+                match c2[face.color() as usize].checked_add_signed(face.sign()) {
+                    Some(n) => {
+                        c2[face.color() as usize] = n;
+                        let i2 = as_index(&c2);
+                        if !c_sRGB.inside[i2] {
+                            true_surface.insert(c);
+                            break;
+                        }
+                    }
+                    None => {
+                        true_surface.insert(c);
+                        break;
+                    }
                 }
             }
         }
     }
-    println!("{}\n", count);
+    println!("{}\n", true_surface.len());
 
     // let mut output_colors = vec![];
     // let start_time = Instant::now();
